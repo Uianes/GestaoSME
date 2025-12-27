@@ -8,7 +8,7 @@
             <div class="col-12 col-lg-6">
                 <div class="d-flex align-items-center gap-3 mb-4">
                     <div class="app-icon" aria-hidden="true">
-                        <img src="img/logosmefundo.svg" alt="">
+                        <img src="img/logosmefundo.svg" alt="Logo SME">
                     </div>
                 </div>
 
@@ -17,15 +17,16 @@
                 </h1>
 
                 <p class="fs-4" style="color: var(--text-2); max-width: 34rem;">
-                    Site oficial da Secretaria Municipal de Educação de Santo Augusto - RS, para gestão de sistemas internos.
+                    Site oficial da Secretaria Municipal de Educação de Santo Augusto - RS, para gestão de sistemas
+                    internos.
                 </p>
 
                 <div class="mt-4 d-flex gap-2 flex-wrap">
-                    <a class="btn btn-dark btn-lg rounded-4 px-4" href="views/login.php">
+                    <a class="btn btn-dark btn-lg rounded-4 px-4" href="app.php?page=login">
                         Entrar <i class="bi bi-arrow-right ms-1"></i>
                     </a>
-                    <a class="btn btn-outline-secondary btn-lg rounded-4 px-4" href="#">
-                        Criar conta
+                    <a class="btn btn-outline-dark btn-lg rounded-4 px-4" href="#">
+                        Cadastrar
                     </a>
                 </div>
             </div>
@@ -118,4 +119,5 @@
         </div>
     </div>
 </div>
- <?php include 'componentes/scripts.php'; ?>
+
+<?php include 'componentes/scripts.php'; ?>
