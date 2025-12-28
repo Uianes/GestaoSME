@@ -52,7 +52,7 @@ if (!empty($user) && !empty($user['nome'])) {
 ?>
 <div class="p-3">
   <div class="input-group sa-search">
-    <span class="input-group-text bg-white border-end-0">
+      <span class="input-group-text bg-body border-end-0">
       <i class="bi bi-search"></i>
     </span>
     <input type="text" class="form-control border-start-0" placeholder="Pesquisar...">
@@ -213,7 +213,7 @@ if (!empty($user) && !empty($user['nome'])) {
       <img src="<?= htmlspecialchars($avatarUrl, ENT_QUOTES, 'UTF-8') ?>" alt="" width="32" height="32"
         class="rounded-circle me-2 border" style="object-fit: cover;">
       <div class="small">
-        <div class="fw-semibold text-dark">
+          <div class="fw-semibold text-body">
           @<?php echo htmlspecialchars($primeiroNome, ENT_QUOTES, 'UTF-8'); ?>
         </div>
         <div class="text-muted" style="font-size:.78rem;">Perfil</div>
@@ -233,7 +233,7 @@ if (!empty($user) && !empty($user['nome'])) {
 <?php
 $sidebarInner = ob_get_clean();
 ?>
-<aside class="sa-sidebar border-end bg-white d-none d-lg-flex flex-column">
+<aside class="sa-sidebar border-end bg-body d-none d-lg-flex flex-column">
   <?= $sidebarInner ?>
 </aside>
 <div class="offcanvas offcanvas-start" tabindex="-1" id="saSidebar" aria-labelledby="saSidebarLabel">
@@ -242,7 +242,7 @@ $sidebarInner = ob_get_clean();
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Fechar"></button>
   </div>
   <div class="offcanvas-body p-0 d-flex flex-column">
-    <div class="sa-sidebar border-end bg-white d-flex flex-column" style="width:100%; min-height:100%">
+    <div class="sa-sidebar border-end bg-body d-flex flex-column" style="width:100%; min-height:100%">
       <?= $sidebarInner ?>
     </div>
   </div>

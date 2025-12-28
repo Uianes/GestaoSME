@@ -59,7 +59,6 @@ function h($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
     </div>
   </div>
 </div>
-<script src="<?= url('assets/js/theme.js') ?>"></script>
 <script>
   document.getElementById('saThemeCurrent').textContent = SATheme.get();
 </script>

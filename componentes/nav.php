@@ -3,7 +3,7 @@ require_once __DIR__ . '/../auth/session.php';
 $activePage = $activePage ?? 'home';
 $user = $_SESSION['user'] ?? null;
 ?>
-<nav class="navbar navbar-light bg-white border-bottom px-3 px-lg-4">
+<nav class="navbar bg-body border-bottom px-3 px-lg-4">
   <div class="d-flex align-items-center gap-2">
     <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#saSidebar" aria-controls="saSidebar">
       <i class="bi bi-list"></i>
@@ -14,6 +14,10 @@ $user = $_SESSION['user'] ?? null;
     </a>
   </div>
   <div class="d-flex align-items-center gap-2">
+    <!-- Toggle Dark/Light -->
+    <button class="btn btn-sm btn-outline-secondary" type="button" onclick="SATheme.toggle()" title="Alternar tema">
+      <i id="themeIcon" class="bi bi-moon-stars"></i>
+    </button>
   <?php if ($user): ?>
     <?php
       $temNotificacoes = false;

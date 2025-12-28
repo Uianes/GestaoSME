@@ -9,7 +9,11 @@ $isLogin = ($page ?? '') === 'login';
         <?php include 'componentes/sidebar.php'; ?>
         <div class="flex-grow-1 d-flex flex-column">
             <?php include 'componentes/nav.php'; ?>
-            <main class="flex-grow-1 p-4 bg-light">
+            <!--
+              Use Bootstrap theme-aware background so Dark Mode applies to the whole page.
+              bg-light forces a light background even when data-bs-theme="dark".
+            -->
+            <main class="flex-grow-1 p-4 bg-body">
                 <?php include $view; ?>
             </main>
         </div>

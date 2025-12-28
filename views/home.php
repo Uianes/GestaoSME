@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../auth/session.php';
 $user = $_SESSION['user'] ?? null;
 ?>
-<h2 class="mb-2">Página inicial</h2>
+<h2 class="mb-2 text-body-emphasis">Página inicial</h2>
 <p class="text-muted mb-4">
     Bem-vindo<?php echo $user ? ', ' . htmlspecialchars($user['nome'], ENT_QUOTES, 'UTF-8') : ''; ?>.
 </p>

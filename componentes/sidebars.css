@@ -19,7 +19,7 @@
 .sa-section-title {
   font-size: .78rem;
   letter-spacing: .04em;
-  color: #6c757d;
+  color: var(--bs-secondary-color);
   font-weight: 700;
   margin-bottom: .35rem;
 }
@@ -34,18 +34,18 @@
   width: 100%;
   padding: .45rem .6rem;
   border-radius: .5rem;
-  color: #212529;
+  color: var(--bs-body-color);
   text-decoration: none;
   font-size: .92rem;
 }
 
 .sa-link:hover {
-  background: rgba(0, 0, 0, .04);
+  background: var(--bs-tertiary-bg);
 }
 
 .sa-link-active {
-  background: rgba(13, 110, 253, .08);
-  outline: 1px solid rgba(13, 110, 253, .18);
+  background: var(--bs-primary-bg-subtle);
+  outline: 1px solid var(--bs-primary-border-subtle);
   font-weight: 600;
 }
 
