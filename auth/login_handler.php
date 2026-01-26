@@ -55,5 +55,49 @@ $_SESSION['user'] = [
     'email'     => (string)($user['email'] ?? ''),
     'avatar'    => (string)($user['avatar'] ?? '')
 ];
+$stmt = $conn->prepare("
+    SELECT DISTINCT vinculo.id_unidade, unidade.nome AS unidade_nome, orgaos.nome_orgao
+    FROM vinculo
+    INNER JOIN unidade ON vinculo.id_unidade = unidade.id_unidade
+    INNER JOIN orgaos ON vinculo.id_orgao = orgaos.id_orgao
+    WHERE vinculo.matricula = ?
+    ORDER BY unidade.nome ASC
+");
+$stmt->bind_param("i", $_SESSION['user']['matricula']);
+$stmt->execute();
+$resultVinculos = $stmt->get_result();
+$stmt->close();
+
+$userUnidades = [];
+$userUnidadesNomes = [];
+$userIsSme = false;
+function is_sme_unit_name(string $name): bool {
+    $normalized = preg_replace('/[^A-Z]/', '', strtoupper($name));
+    return $normalized === 'SME';
+}
+while ($row = $resultVinculos->fetch_assoc()) {
+    $idUnidade = (int)$row['id_unidade'];
+    $nomeUnidade = (string)$row['unidade_nome'];
+    if ($idUnidade > 0) {
+        $userUnidades[] = $idUnidade;
+        $userUnidadesNomes[$idUnidade] = $nomeUnidade;
+    }
+    $nomeOrgao = (string)($row['nome_orgao'] ?? '');
+    if (is_sme_unit_name($nomeUnidade) || is_sme_unit_name($nomeOrgao)) {
+        $userIsSme = true;
+    }
+}
+
+$_SESSION['user_unidades'] = $userUnidades;
+$_SESSION['user_unidades_names'] = $userUnidadesNomes;
+$_SESSION['user_is_sme'] = $userIsSme;
+
+if (!empty($userUnidades)) {
+    $_SESSION['user_local'] = $userUnidades[0];
+    $_SESSION['user_local_name'] = $userUnidadesNomes[$userUnidades[0]] ?? null;
+} else {
+    $_SESSION['user_local'] = null;
+    $_SESSION['user_local_name'] = null;
+}
 header('Location: ../app.php?page=home');
 exit;
