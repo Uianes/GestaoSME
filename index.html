@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Monitoramento do PME — Santo Augusto</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    :root { --card-radius: 16px; }
+
+    body { background: #f6f7fb; }
+    .meta-card { border-radius: var(--card-radius); }
+    .estr-card { border-radius: 14px; }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      font-weight: 600;
+      border-radius: 999px;
+      padding: .25rem .6rem;
+      font-size: .9rem;
+      border: 1px solid rgba(0,0,0,.08);
+      background: #fff;
+      user-select: none;
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .dot-red { background: #dc3545; }
+    .dot-yellow { background: #ffc107; }
+    .dot-green { background: #198754; }
+
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .small-muted { color: #6c757d; font-size: .9rem; }
+
+    .sticky-topbar { position: sticky; top: 0; z-index: 1020; backdrop-filter: blur(10px); }
+    .topbar {
+      background: rgba(246, 247, 251, .9);
+      border-bottom: 1px solid rgba(0,0,0,.06);
+    }
+
+    .btn-status {
+      border-radius: 999px;
+      padding: .25rem .65rem;
+      font-weight: 600;
+    }
+
+    .evidence-box {
+      background: #fbfbfd;
+      border: 1px dashed rgba(0,0,0,.15);
+      border-radius: 12px;
+      padding: .75rem;
+    }
+
+    /* Collapsible indicator on meta header */
+    .meta-progress {
+      min-width: 220px;
+    }
+
+    .badge-soft {
+      border: 1px solid rgba(0,0,0,.08);
+      background: #fff;
+      font-weight: 600;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="sticky-topbar topbar">
+    <div class="container py-3">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+          <h1 class="h4 m-0">Monitoramento do PME — Santo Augusto</h1>
+          <div class="small-muted">Cards por Meta e Estratégia com status e evidências</div>
+        </div>
+
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <input id="searchInput" class="form-control" style="min-width: 320px;" placeholder="Pesquisar meta/estratégia..." />
+          <button id="btnExpandAll" class="btn btn-outline-secondary">Expandir tudo</button>
+          <button id="btnCollapseAll" class="btn btn-outline-secondary">Recolher tudo</button>
+          <button id="btnClearLocal" class="btn btn-outline-danger">Limpar marcações</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container my-4">
+    <div id="loading" class="alert alert-info">Carregando JSON...</div>
+    <div id="error" class="alert alert-danger d-none"></div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-lg-4">
+        <div class="card meta-card shadow-sm">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="fw-bold">Resumo geral</div>
+              <span class="badge badge-soft text-dark" id="overallCount">—</span>
+            </div>
+            <hr class="my-2" />
+            <div class="d-flex flex-wrap gap-2">
+              <span class="status-pill"><span class="dot dot-red"></span> Não completo: <span id="countRed" class="mono">0</span></span>
+              <span class="status-pill"><span class="dot dot-yellow"></span> Atenção: <span id="countYellow" class="mono">0</span></span>
+              <span class="status-pill"><span class="dot dot-green"></span> Completo: <span id="countGreen" class="mono">0</span></span>
+            </div>
+            <div class="small-muted mt-2">
+              Dica: as marcações ficam salvas no navegador (localStorage).
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-8">
+        <div class="card meta-card shadow-sm">
+          <div class="card-body">
+            <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+              <div>
+                <div class="fw-bold">Arquivo de dados</div>
+                <div class="small-muted">
+                  Ajuste o nome do JSON se necessário:
+                  <span class="mono" id="jsonPathLabel">PME_Santo_Augusto_DOCX_FIEL.json</span>
+                </div>
+              </div>
+              <div class="d-flex gap-2">
+                <button id="btnReload" class="btn btn-primary">Recarregar</button>
+              </div>
+            </div>
+            <div class="small-muted mt-2">
+              Se o JSON não carregar, rode um servidor local. Ex.: <span class="mono">python -m http.server</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="metasContainer" class="d-grid gap-3"></div>
+  </div>
+
+  <script>
+    // ======= CONFIG =======
+    const JSON_PATH = "PME_Santo_Augusto_DOCX_FIEL.json"; // coloque o arquivo ao lado deste HTML
+    const LS_PREFIX = "pme_monitoramento_v1:";
+
+    // status ids
+    const STATUS = {
+      NAO_COMPLETO: "nao_completo", // 🔴
+      ATENCAO: "atencao",           // 🟡
+      COMPLETO: "completo"          // 🟢
+    };
+
+    const STATUS_LABEL = {
+      [STATUS.NAO_COMPLETO]: { text: "Não completo", dotClass: "dot-red" },
+      [STATUS.ATENCAO]: { text: "Atenção", dotClass: "dot-yellow" },
+      [STATUS.COMPLETO]: { text: "Completo", dotClass: "dot-green" }
+    };
+
+    // ======= STATE =======
+    let PME = null;
+
+    function lsKey(codigo) { return `${LS_PREFIX}${codigo}`; }
+
+    function getSaved(codigo) {
+      try {
+        const raw = localStorage.getItem(lsKey(codigo));
+        return raw ? JSON.parse(raw) : null;
+      } catch { return null; }
+    }
+
+    function saveState(codigo, obj) {
+      localStorage.setItem(lsKey(codigo), JSON.stringify(obj));
+    }
+
+    function clearAllSaved() {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(LS_PREFIX)) keysToRemove.push(k);
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    }
+
+    function normalizeText(s) {
+      return (s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+    }
+
+    // ======= UI helpers =======
+    function statusPill(status) {
+      const meta = STATUS_LABEL[status] || STATUS_LABEL[STATUS.NAO_COMPLETO];
+      return `
+        <span class="status-pill">
+          <span class="dot ${meta.dotClass}"></span>
+          ${meta.text}
+        </span>`;
+    }
+
+    function computeMetaProgress(meta) {
+      const strategies = meta.estrategias || [];
+      let red = 0, yellow = 0, green = 0;
+      for (const s of strategies) {
+        const saved = getSaved(s.codigo);
+        const st = saved?.status || STATUS.NAO_COMPLETO;
+        if (st === STATUS.COMPLETO) green++;
+        else if (st === STATUS.ATENCAO) yellow++;
+        else red++;
+      }
+      return { total: strategies.length, red, yellow, green };
+    }
+
+    function updateOverallCounters() {
+      if (!PME) return;
+
+      let total = 0, red = 0, yellow = 0, green = 0;
+
+      for (const meta of PME.plano.metas) {
+        for (const s of (meta.estrategias || [])) {
+          total++;
+          const saved = getSaved(s.codigo);
+          const st = saved?.status || STATUS.NAO_COMPLETO;
+          if (st === STATUS.COMPLETO) green++;
+          else if (st === STATUS.ATENCAO) yellow++;
+          else red++;
+        }
+      }
+
+      document.getElementById("overallCount").textContent = `${total} estratégias`;
+      document.getElementById("countRed").textContent = red;
+      document.getElementById("countYellow").textContent = yellow;
+      document.getElementById("countGreen").textContent = green;
+    }
+
+    // ======= Render =======
+    function render() {
+      const container = document.getElementById("metasContainer");
+      container.innerHTML = "";
+
+      const q = normalizeText(document.getElementById("searchInput").value);
+
+      for (const meta of PME.plano.metas) {
+        const progress = computeMetaProgress(meta);
+
+        // filter by search (meta + strategies)
+        const metaText = normalizeText(`meta ${meta.meta} ${meta.descricao || ""}`);
+        const strategiesText = normalizeText((meta.estrategias || []).map(s => `${s.codigo} ${s.texto}`).join(" "));
+        const match = !q || metaText.includes(q) || strategiesText.includes(q);
+        if (!match) continue;
+
+        const metaId = `meta_${meta.meta}`;
+        const collapseId = `collapse_${meta.meta}`;
+
+        const metaHtml = document.createElement("div");
+        metaHtml.className = "card meta-card shadow-sm";
+        metaHtml.innerHTML = `
+          <div class="card-header bg-white">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+              <div class="flex-grow-1">
+                <div class="d-flex align-items-center gap-2">
+                  <span class="badge text-bg-primary">Meta ${meta.meta}</span>
+                  <span class="small-muted mono">${progress.total} estratégias</span>
+                </div>
+                <div class="mt-2">${meta.descricao || ""}</div>
+              </div>
+
+              <div class="meta-progress">
+                <div class="d-flex flex-wrap gap-2 justify-content-end">
+                  <span class="status-pill"><span class="dot dot-red"></span> ${progress.red}</span>
+                  <span class="status-pill"><span class="dot dot-yellow"></span> ${progress.yellow}</span>
+                  <span class="status-pill"><span class="dot dot-green"></span> ${progress.green}</span>
+                </div>
+                <div class="d-grid mt-2">
+                  <button class="btn btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false">
+                    Ver estratégias
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="${collapseId}" class="collapse">
+            <div class="card-body">
+              <div class="d-grid gap-3" id="${metaId}"></div>
+            </div>
+          </div>
+        `;
+
+        container.appendChild(metaHtml);
+
+        const strategiesContainer = metaHtml.querySelector(`#${metaId}`);
+
+        for (const estr of (meta.estrategias || [])) {
+          const saved = getSaved(estr.codigo) || {};
+          const status = saved.status || STATUS.NAO_COMPLETO;
+          const evidencia = saved.evidencia || "";
+          const link = saved.link || "";
+
+          const estrCard = document.createElement("div");
+          estrCard.className = "card estr-card";
+          estrCard.dataset.search = normalizeText(`${estr.codigo} ${estr.texto}`);
+
+          estrCard.innerHTML = `
+            <div class="card-body">
+              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                <div class="flex-grow-1">
+                  <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="badge text-bg-light text-dark mono">${estr.codigo}</span>
+                    <span id="pill_${estr.codigo.replaceAll('.','_')}">${statusPill(status)}</span>
+                  </div>
+                  <div class="mt-2">${estr.texto || ""}</div>
+                </div>
+
+                <div class="d-flex flex-wrap gap-2">
+                  <button class="btn btn-outline-danger btn-status" data-action="setStatus" data-codigo="${estr.codigo}" data-status="${STATUS.NAO_COMPLETO}">🔴 Não completo</button>
+                  <button class="btn btn-outline-warning btn-status" data-action="setStatus" data-codigo="${estr.codigo}" data-status="${STATUS.ATENCAO}">🟡 Atenção</button>
+                  <button class="btn btn-outline-success btn-status" data-action="setStatus" data-codigo="${estr.codigo}" data-status="${STATUS.COMPLETO}">🟢 Completo</button>
+                </div>
+              </div>
+
+              <div class="mt-3 evidence-box">
+                <div class="row g-2">
+                  <div class="col-12 col-lg-6">
+                    <label class="form-label fw-semibold">Evidência / descrição</label>
+                    <textarea class="form-control" rows="3" placeholder="Ex.: relatório, ata, ação realizada, justificativa..."
+                      data-action="saveEvidencia" data-codigo="${estr.codigo}">${escapeHtml(evidencia)}</textarea>
+                  </div>
+                  <div class="col-12 col-lg-6">
+                    <label class="form-label fw-semibold">Link do documento comprobatório</label>
+                    <input class="form-control" type="url" placeholder="https://..." value="${escapeAttr(link)}"
+                      data-action="saveLink" data-codigo="${estr.codigo}" />
+                    <div class="mt-2 d-flex flex-wrap gap-2">
+                      <a class="btn btn-sm btn-outline-primary ${link ? "" : "disabled"}" target="_blank" rel="noopener"
+                        href="${escapeAttr(link || "#")}">Abrir link</a>
+                      <button class="btn btn-sm btn-outline-secondary" data-action="copyCodigo" data-codigo="${estr.codigo}">Copiar código</button>
+                    </div>
+
+                    <div class="mt-3">
+                      <label class="form-label fw-semibold">Espaço para gráfico (placeholder)</label>
+                      <div class="p-3 bg-white border rounded-3 small-muted">
+                        Aqui você pode embutir um gráfico (Chart.js), um iframe, ou um resumo automático.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="small-muted mt-2">
+                Chave de armazenamento: <span class="mono">${estr.codigo}</span>
+              </div>
+            </div>
+          `;
+
+          strategiesContainer.appendChild(estrCard);
+        }
+      }
+
+      updateOverallCounters();
+    }
+
+    // ======= Sanitizers for injecting saved text safely =======
+    function escapeHtml(str) {
+      return (str || "").replace(/[&<>"']/g, (m) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+      }[m]));
+    }
+    function escapeAttr(str) {
+      return (str || "").replace(/"/g, "&quot;");
+    }
+
+    // ======= Events =======
+    document.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-action]");
+      if (!btn) return;
+
+      const action = btn.getAttribute("data-action");
+      const codigo = btn.getAttribute("data-codigo");
+
+      if (action === "setStatus") {
+        const status = btn.getAttribute("data-status");
+        const saved = getSaved(codigo) || {};
+        saved.status = status;
+        saveState(codigo, saved);
+
+        const pill = document.getElementById(`pill_${codigo.replaceAll('.','_')}`);
+        if (pill) pill.innerHTML = statusPill(status);
+
+        // refresh meta header counts + overall counts
+        render();
+      }
+
+      if (action === "copyCodigo") {
+        navigator.clipboard?.writeText(codigo);
+        btn.textContent = "Copiado!";
+        setTimeout(() => btn.textContent = "Copiar código", 900);
+      }
+    });
+
+    document.addEventListener("input", (ev) => {
+      const el = ev.target;
+      const action = el.getAttribute("data-action");
+      const codigo = el.getAttribute("data-codigo");
+      if (!action || !codigo) return;
+
+      const saved = getSaved(codigo) || {};
+      if (action === "saveEvidencia") {
+        saved.evidencia = el.value;
+        saveState(codigo, saved);
+      }
+      if (action === "saveLink") {
+        saved.link = el.value;
+        saveState(codigo, saved);
+        // atualizar botão "Abrir link" sem rerender completo:
+        // (mais simples: rerender)
+        render();
+      }
+    });
+
+    document.getElementById("searchInput").addEventListener("input", () => render());
+
+    document.getElementById("btnClearLocal").addEventListener("click", () => {
+      if (!confirm("Tem certeza que deseja limpar todas as marcações e evidências deste navegador?")) return;
+      clearAllSaved();
+      render();
+    });
+
+    document.getElementById("btnReload").addEventListener("click", () => load());
+
+    document.getElementById("btnExpandAll").addEventListener("click", () => {
+      document.querySelectorAll(".collapse").forEach(c => c.classList.add("show"));
+    });
+
+    document.getElementById("btnCollapseAll").addEventListener("click", () => {
+      document.querySelectorAll(".collapse").forEach(c => c.classList.remove("show"));
+    });
+
+    // ======= Load JSON =======
+    async function load() {
+      document.getElementById("jsonPathLabel").textContent = JSON_PATH;
+      document.getElementById("loading").classList.remove("d-none");
+      document.getElementById("error").classList.add("d-none");
+
+      try {
+        const res = await fetch(JSON_PATH, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Não foi possível carregar ${JSON_PATH} (HTTP ${res.status}).`);
+
+        PME = await res.json();
+        document.getElementById("loading").classList.add("d-none");
+        render();
+      } catch (err) {
+        document.getElementById("loading").classList.add("d-none");
+        const box = document.getElementById("error");
+        box.classList.remove("d-none");
+        box.innerHTML = `
+          <div class="fw-bold mb-1">Erro ao carregar o JSON</div>
+          <div class="mono">${escapeHtml(String(err))}</div>
+          <div class="mt-2 small-muted">
+            Dica: abra via servidor local (ex.: <span class="mono">python -m http.server</span>) e acesse via <span class="mono">http://localhost:8000</span>.
+          </div>`;
+      }
+    }
+
+    // ======= bootstrap collapse dependency =======
+    // We'll load bootstrap bundle at the end
+    load();
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
