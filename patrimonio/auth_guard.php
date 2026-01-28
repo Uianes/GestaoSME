@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../auth/permissions.php';
 require_once __DIR__ . '/db_connection.php';
 
 function pat_ensure_session(): void
@@ -8,6 +9,12 @@ function pat_ensure_session(): void
         session_name(SESSION_NAME);
         session_start();
     }
+}
+
+if (!user_can_access_system('patrimonio')) {
+    pat_ensure_session();
+    echo 'Sem permissão de acesso.';
+    exit;
 }
 
 function pat_is_sme_unit_name(string $name): bool

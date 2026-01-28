@@ -4,37 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 $user = $_SESSION['user'] ?? null;
 $activePage = $activePage ?? 'home';
-$links = [
-  'home' => ['label' => 'Início', 'icon' => 'bi-house', 'href' => url('app.php')],
-  'protocolo' => ['label' => 'Protocolo Eletrônico', 'icon' => 'bi-file-text-fill', 'href' => url('app.php?page=protocolo')],
-  'documentos' => ['label' => 'Repositório de Documentos', 'icon' => 'bi-chat-left-text-fill', 'href' => url('app.php?page=documentos')],
-  'assinatura' => ['label' => 'Assinatura Digital', 'icon' => 'bi-pencil-square', 'href' => url('app.php?page=assinatura')],
-  'certificados' => ['label' => 'Certificados', 'icon' => 'bi-file-earmark-medical-fill', 'href' => url('app.php?page=certificados')],
-  'atestados' => ['label' => 'Atestados', 'icon' => 'bi-file-earmark-post', 'href' => url('app.php?page=atestados')],
-  'ouvidoria' => ['label' => 'Ouvidoria', 'icon' => 'bi-bookmark-plus', 'href' => url('app.php?page=ouvidoria')],
-  'dashboards' => ['label' => 'Dashboards', 'icon' => 'bi-bar-chart', 'href' => url('app.php?page=dashboards')],
-  'turmas' => ['label' => 'Minhas turmas', 'icon' => 'bi-mortarboard', 'href' => url('app.php?page=turmas')],
-  'projetos' => ['label' => 'Meus projetos', 'icon' => 'bi-award', 'href' => url('app.php?page=projetos')],
-  'biblioteca' => ['label' => 'Biblioteca', 'icon' => 'bi-book', 'href' => url('app.php?page=biblioteca')],
-  'pareces' => ['label' => 'Meus pareces', 'icon' => 'bi-ui-checks', 'href' => url('app.php?page=pareces')],
-  'frequencia' => ['label' => 'Monitoramento frequência', 'icon' => 'bi-percent', 'href' => url('app.php?page=frequencia')],
-  'aee' => ['label' => 'PAEE e PEI', 'icon' => 'bi-easel2', 'href' => url('app.php?page=aee')],
-  'infraestrutura' => ['label' => 'Avaliação de Infraestrutura', 'icon' => 'bi-building-check', 'href' => url('app.php?page=infraestrutura')],
-  'PME' => ['label' => 'Plano Municipal de Educação', 'icon' => 'bi-card-list', 'href' => url('app.php?page=pme')],
-  'PPA' => ['label' => 'Plano Plurianual', 'icon' => 'bi-cash-coin', 'href' => url('app.php?page=ppa')],
-  'planosGestao' => ['label' => 'Planos de Gestão', 'icon' => 'bi-postcard', 'href' => url('app.php?page=planosGestao')],
-  'calendario' => ['label' => 'Calendário', 'icon' => 'bi-calendar', 'href' => url('app.php?page=calendario')],
-  'justificativas' => ['label' => 'Justificativas do Ponto', 'icon' => 'bi-calendar-plus', 'href' => url('app.php?page=justificativas')],
-  'horarios' => ['label' => 'Construir Horários', 'icon' => 'bi-table', 'href' => url('app.php?page=horarios')],
-  'atestadosSaude' => ['label' => 'Atestados de Saúde', 'icon' => 'bi-bandaid', 'href' => url('app.php?page=atestadosSaude')],
-  'mooc' => ['label' => 'Cursos', 'icon' => 'bi-journals', 'href' => url('app.php?page=cursos')],
-  'progressao' => ['label' => 'Gestão de Certificados', 'icon' => 'bi-person-workspace', 'href' => url('app.php?page=progressao')],
-  'comunicadosPDDE' => ['label' => 'Comunicados PDDE', 'icon' => 'bi-chat-quote-fill', 'href' => url('app.php?page=comunicadosPDDE')],
-  'patrimonio' => ['label' => 'Patrimônio', 'icon' => 'bi-music-player', 'href' => url('app.php?page=patrimonio')],
-  'suporte' => ['label' => 'Suporte', 'icon' => 'bi-hammer', 'href' => url('app.php?page=suporte')],
-  'transporte' => ['label' => 'Transporte Escolar', 'icon' => 'bi-bus-front', 'href' => url('app.php?page=transporte')],
-  'votacoes' => ['label' => 'Votações', 'icon' => 'bi-person-plus', 'href' => url('app.php?page=votacoes')]
-];
+$links = require __DIR__ . '/../config/links.php';
 function sa_sidebar_link(string $key, array $link, string $activePage): string
 {
   $active = ($key === $activePage) ? ' sa-link-active' : '';
@@ -195,6 +165,7 @@ if (!empty($user) && !empty($user['nome'])) {
       <div class="collapse show" id="pvCatalog">
         <ul class="list-unstyled sa-sub">
           <li class="sa-item"><a class="sa-link" href="#"><i class="bi bi-star me-2"></i> Favoritos</a></li>
+          <li class="sa-item"><a class="sa-link" href="<?= url('app.php?page=admin') ?>"><i class="bi bi-star me-2"></i> Modo Administrador</a></li>
         </ul>
       </div>
     </li>

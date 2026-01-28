@@ -15,7 +15,7 @@ if ($usuario === '' || $senha === '') {
 $conn = db();
 $usuario_num = preg_replace('/\D+/', '', $usuario);
 $matricula = ctype_digit($usuario_num) ? (int)$usuario_num : 0;
-$sql = "SELECT matricula, cpf, nome, email, senha, ativo, avatar
+$sql = "SELECT matricula, cpf, nome, email, senha, ativo, avatar, ADM
         FROM usuarios
         WHERE cpf = ?
            OR email = ?
@@ -53,7 +53,8 @@ $_SESSION['user'] = [
     'cpf'       => (string)$user['cpf'],
     'nome'      => (string)$user['nome'],
     'email'     => (string)($user['email'] ?? ''),
-    'avatar'    => (string)($user['avatar'] ?? '')
+    'avatar'    => (string)($user['avatar'] ?? ''),
+    'adm'       => (int)($user['ADM'] ?? 0)
 ];
 $stmt = $conn->prepare("
     SELECT DISTINCT vinculo.id_unidade, unidade.nome AS unidade_nome, orgaos.nome_orgao
