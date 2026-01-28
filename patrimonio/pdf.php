@@ -77,10 +77,18 @@ try {
         $nomesPorLocal[$row['Localizacao']] = $row['unidade_nome'] ?? $row['Localizacao'];
     }
 
-    foreach ($locals as $local) {
+    // Garante nome mesmo quando não há patrimônio na unidade
+    $sqlUnidades = "SELECT id_unidade, nome FROM unidade WHERE id_unidade IN ($placeholders)";
+    $resultUnidades = mysqli_execute_query($conn, $sqlUnidades, $locals);
+    while ($rowUnidade = mysqli_fetch_assoc($resultUnidades)) {
+        $nomesPorLocal[(int)$rowUnidade['id_unidade']] = $rowUnidade['nome'];
+    }
+
+    $totalLocais = count($locals);
+    foreach ($locals as $index => $local) {
         $localNome = $nomesPorLocal[$local] ?? $local;
         $html .= '<div style="text-align:center; margin-bottom:10px;">
-                    <strong>Local: ' . $localNome . '</strong>
+                    <strong>Local: ' . htmlspecialchars((string)$localNome, ENT_QUOTES, 'UTF-8') . '</strong>
                   </div>';
 
         $html .= '<table>
@@ -101,13 +109,13 @@ try {
             foreach ($dadosPorLocal[$local] as $row) {
                 $dataEntrada = date("d/m/Y", strtotime($row["Data_Entrada"]));
                 $html .= '<tr>
-                            <td>' . $row['N_Patrimonio'] . '</td>
-                            <td>' . $row['Descricao'] . '</td>
-                            <td>' . $dataEntrada . '</td>
-                            <td>' . ($row['unidade_nome'] ?? $row['Localizacao']) . '</td>
-                            <td>' . $row['Descricao_Localizacao'] . '</td>
-                            <td>' . $row['Status'] . '</td>
-                            <td>' . $row['Memorando'] . '</td>
+                            <td>' . htmlspecialchars((string)$row['N_Patrimonio'], ENT_QUOTES, 'UTF-8') . '</td>
+                            <td>' . htmlspecialchars((string)$row['Descricao'], ENT_QUOTES, 'UTF-8') . '</td>
+                            <td>' . htmlspecialchars((string)$dataEntrada, ENT_QUOTES, 'UTF-8') . '</td>
+                            <td>' . htmlspecialchars((string)($row['unidade_nome'] ?? $row['Localizacao']), ENT_QUOTES, 'UTF-8') . '</td>
+                            <td>' . htmlspecialchars((string)$row['Descricao_Localizacao'], ENT_QUOTES, 'UTF-8') . '</td>
+                            <td>' . htmlspecialchars((string)$row['Status'], ENT_QUOTES, 'UTF-8') . '</td>
+                            <td>' . htmlspecialchars((string)$row['Memorando'], ENT_QUOTES, 'UTF-8') . '</td>
                           </tr>';
             }
         } else {
@@ -116,8 +124,10 @@ try {
                       </tr>';
         }
 
-        $html .= '</tbody></table>
-                  <div class="page-break"></div>';
+        $html .= '</tbody></table>';
+        if ($index < $totalLocais - 1) {
+            $html .= '<div class="page-break"></div>';
+        }
     }
 
     $html .= '</body></html>';
