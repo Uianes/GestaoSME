@@ -32,9 +32,20 @@ CREATE TABLE usuarios_sistemas (
 );
 ```
 
+Para o calendario e notificacoes, use o script em `database/calendario.sql`.
+
 ## Permissoes
 - `ADM = 1` no usuario libera o Modo Administrador
 - Usuarios nao admin acessam somente os sistemas liberados em `usuarios_sistemas`
+
+## Primeiro acesso
+No primeiro login o usuario precisa atualizar e-mail, telefone e senha. Para controlar
+isso com flag, adicione a coluna:
+```sql
+ALTER TABLE usuarios ADD COLUMN senha_alterada TINYINT NOT NULL DEFAULT 0;
+```
+Se a coluna nao existir, o sistema exige a atualizacao quando e-mail ou telefone estiverem vazios
+ou quando a senha ainda estiver em formato antigo.
 
 ## Estrutura basica
 - `app.php`: roteamento simples por `?page=...`
@@ -47,6 +58,11 @@ CREATE TABLE usuarios_sistemas (
 ## Sistemas disponiveis
 Os sistemas ficam em `config/links.php`. O painel admin usa essa lista para liberar
 acesso por usuario.
+
+## Calendario
+- Eventos sao visiveis para o criador, usuarios selecionados, unidades marcadas e equipe SME.
+- O aceite e automatico.
+- Notificacoes aparecem na navbar e em `app.php?page=notificacoes`.
 
 ## Observacoes
 - Se `usuarios_sistemas` nao existir, o sistema libera o acesso por padrao.

@@ -168,7 +168,17 @@ if ($permissionsTableReady && !empty($users)) {
                 </td>
                 <td><?= htmlspecialchars((string)$user['matricula'], ENT_QUOTES, 'UTF-8') ?></td>
                 <td><?= htmlspecialchars((string)($user['email'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                <td><?= (int)$user['ativo'] === 1 ? 'Sim' : 'Não' ?></td>
+                <td class="text-center">
+                  <input type="hidden" name="ativo[<?= $matricula ?>]" value="0">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    name="ativo[<?= $matricula ?>]"
+                    value="1"
+                    <?= (int)$user['ativo'] === 1 ? 'checked' : '' ?>
+                    <?= !$permissionsTableReady ? 'disabled' : '' ?>
+                  >
+                </td>
                 <td><?= (int)$user['ADM'] === 1 ? 'Sim' : 'Não' ?></td>
                 <?php foreach ($links as $key => $link): ?>
                   <td class="text-center">

@@ -26,12 +26,24 @@ $submitted = $_POST['access'] ?? [];
 if (!is_array($submitted)) {
     $submitted = [];
 }
+$submittedAtivo = $_POST['ativo'] ?? [];
+if (!is_array($submittedAtivo)) {
+    $submittedAtivo = [];
+}
 
 $deleteStmt = $conn->prepare('DELETE FROM usuarios_sistemas WHERE matricula = ?');
 $insertStmt = $conn->prepare('INSERT INTO usuarios_sistemas (matricula, sistema) VALUES (?, ?)');
 
 $submittedMatriculas = array_map('intval', array_keys($submitted));
 foreach ($submittedMatriculas as $matricula) {
+    if (array_key_exists($matricula, $submittedAtivo)) {
+        $ativo = (int)$submittedAtivo[$matricula] === 1 ? 1 : 0;
+        $stmt = $conn->prepare('UPDATE usuarios SET ativo = ? WHERE matricula = ?');
+        $stmt->bind_param('ii', $ativo, $matricula);
+        $stmt->execute();
+        $stmt->close();
+    }
+
     $deleteStmt->bind_param('i', $matricula);
     $deleteStmt->execute();
 

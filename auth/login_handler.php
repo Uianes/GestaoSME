@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/session.php';
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/first_access.php';
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: ../app.php?page=login');
     exit;
@@ -15,7 +16,7 @@ if ($usuario === '' || $senha === '') {
 $conn = db();
 $usuario_num = preg_replace('/\D+/', '', $usuario);
 $matricula = ctype_digit($usuario_num) ? (int)$usuario_num : 0;
-$sql = "SELECT matricula, cpf, nome, email, senha, ativo, avatar, ADM
+$sql = "SELECT matricula, cpf, nome, email, telefone, senha, ativo, avatar, ADM
         FROM usuarios
         WHERE cpf = ?
            OR email = ?
@@ -53,6 +54,7 @@ $_SESSION['user'] = [
     'cpf'       => (string)$user['cpf'],
     'nome'      => (string)$user['nome'],
     'email'     => (string)($user['email'] ?? ''),
+    'telefone'  => (string)($user['telefone'] ?? ''),
     'avatar'    => (string)($user['avatar'] ?? ''),
     'adm'       => (int)($user['ADM'] ?? 0)
 ];
@@ -99,6 +101,10 @@ if (!empty($userUnidades)) {
 } else {
     $_SESSION['user_local'] = null;
     $_SESSION['user_local_name'] = null;
+}
+if (first_access_needs_update((int)$user['matricula'])) {
+    header('Location: ../app.php?page=primeiro_acesso');
+    exit;
 }
 header('Location: ../app.php?page=home');
 exit;

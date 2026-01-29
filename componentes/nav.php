@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/../config/db.php';
 $activePage = $activePage ?? 'home';
 $user = $_SESSION['user'] ?? null;
 ?>
@@ -21,6 +22,15 @@ $user = $_SESSION['user'] ?? null;
   <?php if ($user): ?>
     <?php
       $temNotificacoes = false;
+      $notiCount = 0;
+      $conn = db();
+      $stmt = $conn->prepare('SELECT COUNT(*) AS total FROM notificacoes WHERE matricula = ? AND lida_em IS NULL');
+      $stmt->bind_param('i', $user['matricula']);
+      $stmt->execute();
+      $result = $stmt->get_result();
+      $notiCount = (int)($result->fetch_assoc()['total'] ?? 0);
+      $stmt->close();
+      $temNotificacoes = $notiCount > 0;
     ?>
     <a class="btn btn-sm btn-outline-secondary position-relative"
        href="app.php?page=notificacoes"
@@ -28,6 +38,9 @@ $user = $_SESSION['user'] ?? null;
        
       <?php if ($temNotificacoes): ?>
         <i class="bi bi-bell-fill"></i>
+        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+          <?= $notiCount ?>
+        </span>
       <?php else: ?>
         <i class="bi bi-bell"></i>
       <?php endif; ?>
