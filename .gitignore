@@ -1,0 +1,22 @@
+# OS
+.DS_Store
+
+# Environment/config (local)
+.env
+config/smtp.php
+
+# Database dumps
+*.sql
+
+# Uploads
+uploads/
+
+# Composer
+vendor/
+
+# Logs
+*.log
+
+# Cache/temp
+*.tmp
+*.swp

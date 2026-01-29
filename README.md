@@ -33,6 +33,10 @@ CREATE TABLE usuarios_sistemas (
 ```
 
 Para o calendario e notificacoes, use o script em `database/calendario.sql`.
+Para o protocolo eletronico (assinaturas e anexos), use `database/protocolo_mvp.sql`.
+
+## SMTP (protocolo)
+Por padrão, o envio usa `mail()`. Se quiser SMTP no futuro, podemos adicionar PHPMailer.
 
 ## Permissoes
 - `ADM = 1` no usuario libera o Modo Administrador

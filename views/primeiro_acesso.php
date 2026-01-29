@@ -35,7 +35,7 @@ if (!first_access_needs_update($matricula)) {
       </div>
       <div class="mb-3">
         <label class="form-label">Telefone</label>
-        <input type="text" name="telefone" class="form-control" required>
+        <input type="text" name="telefone" class="form-control" required maxlength="15" placeholder="(DD) 9 000000000" inputmode="numeric">
       </div>
       <div class="mb-3">
         <label class="form-label">Nova senha</label>
@@ -45,9 +45,38 @@ if (!first_access_needs_update($matricula)) {
         <label class="form-label">Confirmar senha</label>
         <input type="password" name="senha_confirmacao" class="form-control" required minlength="6">
       </div>
-      <div class="d-flex justify-content-end">
+  <div class="d-flex justify-content-end">
         <button type="submit" class="btn btn-primary">Salvar</button>
       </div>
     </form>
   </div>
 </div>
+
+<script>
+  (function () {
+    const input = document.querySelector('input[name="telefone"]');
+    if (!input) return;
+
+    function formatPhone(value) {
+      const digits = value.replace(/\D/g, '').slice(0, 12);
+      const ddd = digits.slice(0, 2);
+      const nine = digits.slice(2, 3);
+      const part1 = digits.slice(3, 8);
+      const part2 = digits.slice(8, 12);
+      let result = '';
+      if (ddd) result += `(${ddd})`;
+      if (nine) result += ` ${nine}`;
+      if (part1) result += ` ${part1}`;
+      if (part2) result += `${part2}`;
+      return result.trim();
+    }
+
+    function handleInput() {
+      input.value = formatPhone(input.value);
+    }
+
+    input.addEventListener('input', handleInput);
+    input.addEventListener('blur', handleInput);
+    handleInput();
+  })();
+</script>
