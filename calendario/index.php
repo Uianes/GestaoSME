@@ -75,6 +75,19 @@ while ($row = $result->fetch_assoc()) {
       font-weight: 600;
       text-transform: capitalize;
     }
+    .fc .fc-toolbar {
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .fc .fc-toolbar-chunk {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .fc .fc-button-group {
+      flex-wrap: wrap;
+    }
     .fc .fc-button {
       border-radius: 999px;
       padding: 0.4rem 0.9rem;
@@ -97,6 +110,15 @@ while ($row = $result->fetch_assoc()) {
     }
     .form-select[multiple] {
       min-height: 240px;
+    }
+    @media (max-width: 768px) {
+      .fc .fc-toolbar-title {
+        font-size: 1rem;
+      }
+      .fc .fc-button {
+        padding: 0.35rem 0.7rem;
+        font-size: 0.85rem;
+      }
     }
   </style>
 </head>

@@ -11,7 +11,7 @@ return [
   'turmas' => ['label' => 'Minhas turmas', 'icon' => 'bi-mortarboard', 'href' => url('app.php?page=turmas')],
   'projetos' => ['label' => 'Meus projetos', 'icon' => 'bi-award', 'href' => url('app.php?page=projetos')],
   'biblioteca' => ['label' => 'Biblioteca', 'icon' => 'bi-book', 'href' => url('app.php?page=biblioteca')],
-  'pareces' => ['label' => 'Meus pareces', 'icon' => 'bi-ui-checks', 'href' => url('app.php?page=pareces')],
+  'pareceres' => ['label' => 'Meus pareceres', 'icon' => 'bi-ui-checks', 'href' => url('app.php?page=pareceres')],
   'frequencia' => ['label' => 'Monitoramento frequência', 'icon' => 'bi-percent', 'href' => url('app.php?page=frequencia')],
   'aee' => ['label' => 'PAEE e PEI', 'icon' => 'bi-easel2', 'href' => url('app.php?page=aee')],
   'infraestrutura' => ['label' => 'Avaliação de Infraestrutura', 'icon' => 'bi-building-check', 'href' => url('app.php?page=infraestrutura')],
