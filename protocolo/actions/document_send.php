@@ -87,7 +87,30 @@ try {
             $numero = (int)$seq['proximo_numero'];
         }
 
-        $prefixo = trim((string)($tipo['prefixo'] ?? ''));
+        $stmt = $conn->prepare('SELECT nome FROM unidade WHERE id_unidade = ?');
+        $stmt->bind_param('i', $idUnidade);
+        $stmt->execute();
+        $unidadeNome = (string)($stmt->get_result()->fetch_assoc()['nome'] ?? '');
+        $stmt->close();
+
+        $prefixo = '';
+        if ($unidadeNome !== '') {
+            $partes = preg_split('/\s+/', trim($unidadeNome));
+            $sigla = '';
+            foreach ($partes as $parte) {
+                $parte = preg_replace('/[^A-Za-zÀ-ÿ]/u', '', $parte);
+                if ($parte === '') {
+                    continue;
+                }
+                if (function_exists('mb_substr')) {
+                    $sigla .= mb_strtoupper(mb_substr($parte, 0, 1, 'UTF-8'), 'UTF-8');
+                } else {
+                    $sigla .= strtoupper(substr($parte, 0, 1));
+                }
+            }
+            $prefixo = $sigla !== '' ? $sigla : $unidadeNome;
+        }
+        $prefixo = trim($prefixo);
         $codigo = $prefixo !== '' ? sprintf('%s-%04d/%d', $prefixo, $numero, $ano) : sprintf('%04d/%d', $numero, $ano);
 
         $stmt = $conn->prepare('INSERT INTO doc_numeracao (documento_id, sequencia_id, numero, ano, codigo_formatado) VALUES (?, ?, ?, ?, ?)');

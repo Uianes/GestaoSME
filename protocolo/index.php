@@ -58,6 +58,7 @@ $versao = null;
 $numeracao = null;
 $anexos = [];
 $assinaturas = [];
+$isModeloOficial = false;
 if ($docId > 0) {
     $stmt = $conn->prepare('
         SELECT d.*, s.nome AS status_nome, t.nome AS tipo_nome
@@ -97,6 +98,11 @@ if ($docId > 0) {
     }
 
     if ($documento) {
+        $tipoLower = strtolower((string)($documento['tipo_nome'] ?? ''));
+        $isModeloOficial = strpos($tipoLower, 'memorando') !== false
+            || strpos($tipoLower, 'oficio') !== false
+            || strpos($tipoLower, 'ofício') !== false;
+
         $stmt = $conn->prepare('SELECT * FROM doc_destinatarios WHERE documento_id = ? ORDER BY ordem');
         $stmt->bind_param('i', $docId);
         $stmt->execute();
@@ -178,12 +184,35 @@ $statusClasses = [
   <title>Protocolo Eletrônico</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css">
+  <script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.3/tinymce.min.js" referrerpolicy="origin"></script>
   <style>
     body { background: #f6f8fb; }
     .card { border-radius: 14px; }
-    .quill-editor { min-height: 240px; }
     .badge-status { text-transform: capitalize; }
+    .doc-content table { width: 100%; border-collapse: collapse; }
+    .doc-content th, .doc-content td { border: 1px solid #cbd5e1; padding: 6px 8px; }
+    .doc-content th { background: #f8fafc; }
+    .doc-content img { max-width: 100%; height: auto; }
+    .doc-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .doc-actions .badge { white-space: nowrap; }
+    .dest-row { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    .dest-row select { width: 100%; }
+    @media (min-width: 768px) {
+      .dest-row { grid-template-columns: 1fr 180px; align-items: center; }
+    }
+    .tox .tox-toolbar__primary { flex-wrap: wrap; }
+    .tox .tox-tbtn { min-width: 32px; }
+    @media (max-width: 767.98px) {
+      .container-fluid { padding-left: 16px; padding-right: 16px; }
+      .doc-actions { width: 100%; justify-content: flex-start; }
+      .doc-actions .btn { width: 100%; }
+      .doc-actions .badge { order: -1; }
+      .btn-new-doc { width: 100%; }
+      .card-body { padding: 1rem; }
+      .modal-dialog { margin: 0.5rem; }
+      .modal-body { padding: 1rem; }
+      .tab-content { padding: 1rem; }
+    }
   </style>
 </head>
 <body>
@@ -193,7 +222,7 @@ $statusClasses = [
         <h2 class="mb-1">Protocolo Eletrônico</h2>
         <div class="text-muted">Crie, registre e encaminhe documentos oficiais.</div>
       </div>
-      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#docModal">
+      <button class="btn btn-primary btn-new-doc" data-bs-toggle="modal" data-bs-target="#docModal">
         <i class="bi bi-file-earmark-plus me-2"></i>Novo documento
       </button>
     </div>
@@ -248,14 +277,20 @@ $statusClasses = [
                   <h5 class="mb-1"><?= h($documento['assunto']) ?></h5>
                   <div class="text-muted small"><?= h($documento['tipo_nome']) ?> • <?= h($documento['status_nome']) ?></div>
                 </div>
-                <?php if ($numeracao): ?>
-                  <span class="badge text-bg-primary"><?= h($numeracao['codigo_formatado']) ?></span>
-                <?php endif; ?>
+                <div class="doc-actions">
+                  <?php if ($numeracao): ?>
+                    <span class="badge text-bg-primary"><?= h($numeracao['codigo_formatado']) ?></span>
+                  <?php endif; ?>
+                  <?php if ($isModeloOficial): ?>
+                    <a class="btn btn-sm btn-outline-secondary" href="print.php?doc=<?= (int)$documento['id'] ?>" target="_blank">Imprimir</a>
+                    <a class="btn btn-sm btn-outline-primary" href="pdf.php?doc=<?= (int)$documento['id'] ?>" target="_blank">Baixar PDF</a>
+                  <?php endif; ?>
+                </div>
               </div>
 
               <div class="mb-3">
                 <div class="text-muted small">Conteúdo</div>
-                <div class="border rounded p-3 bg-white">
+                <div class="border rounded p-3 bg-white doc-content">
                   <?= $versao ? $versao['conteudo'] : '<span class="text-muted">Sem conteúdo.</span>' ?>
                 </div>
               </div>
@@ -268,10 +303,11 @@ $statusClasses = [
                   <ul class="list-group list-group-flush">
                     <?php foreach ($destinatarios as $dest): ?>
                       <li class="list-group-item">
+                        <?php $prefixo = $dest['pronome_tratamento'] ? h($dest['pronome_tratamento']) . ' – ' : ''; ?>
                         <?php if ($dest['tipo_destino'] === 'interno'): ?>
-                          <?= $dest['usuario_destino'] ? 'Usuário #' . h($dest['usuario_destino']) : 'Unidade #' . h($dest['id_unidade_destino']) ?>
+                          <?= $prefixo ?><?= $dest['usuario_destino'] ? 'Usuário #' . h($dest['usuario_destino']) : 'Unidade #' . h($dest['id_unidade_destino']) ?>
                         <?php else: ?>
-                          <?= h($dest['nome_externo']) ?> (<?= h($dest['email_externo']) ?>)
+                          <?= $prefixo ?><?= h($dest['nome_externo']) ?> (<?= h($dest['email_externo']) ?>)
                         <?php endif; ?>
                       </li>
                     <?php endforeach; ?>
@@ -396,59 +432,127 @@ $statusClasses = [
                   <label class="form-check-label" for="confidencial">Sim</label>
                 </div>
               </div>
-              <div class="col-md-8">
-                <label class="form-label">Nível de sigilo</label>
-                <input type="text" class="form-control" name="nivel_sigilo" placeholder="Opcional">
-              </div>
               <div class="col-12">
-                <label class="form-label">Conteúdo</label>
-                <div id="editor" class="quill-editor bg-white border rounded"></div>
-                <input type="hidden" name="conteudo" id="conteudo">
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">Destinatários (usuários)</label>
-                <div class="border rounded p-2" style="max-height: 240px; overflow:auto;">
-                  <?php foreach ($usuarios as $usuario): ?>
-                    <div class="form-check">
-                      <input class="form-check-input" type="checkbox" name="dest_usuarios[]" value="<?= (int)$usuario['matricula'] ?>" id="user-<?= (int)$usuario['matricula'] ?>">
-                      <label class="form-check-label" for="user-<?= (int)$usuario['matricula'] ?>">
-                        <?= h($usuario['nome']) ?>
-                      </label>
+                <ul class="nav nav-tabs" id="docTabs" role="tablist">
+                  <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="content-tab" data-bs-toggle="tab" data-bs-target="#content-pane" type="button" role="tab" aria-controls="content-pane" aria-selected="true">Conteúdo</button>
+                  </li>
+                  <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="dest-tab" data-bs-toggle="tab" data-bs-target="#dest-pane" type="button" role="tab" aria-controls="dest-pane" aria-selected="false">Destinatários</button>
+                  </li>
+                  <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="sign-tab" data-bs-toggle="tab" data-bs-target="#sign-pane" type="button" role="tab" aria-controls="sign-pane" aria-selected="false">Assinaturas</button>
+                  </li>
+                </ul>
+                <div class="tab-content border border-top-0 rounded-bottom p-3">
+                  <div class="tab-pane fade show active" id="content-pane" role="tabpanel" aria-labelledby="content-tab">
+                    <label class="form-label">Conteúdo</label>
+                    <div class="mb-2">
+                      <label class="form-label">Modelo do memorando</label>
+                      <select class="form-select" id="memorandoModelo">
+                        <option value="">Sem modelo</option>
+                        <option value="contratacao">Memorando modelo para contratação</option>
+                        <option value="nomeacao">Memorando modelo para nomeação</option>
+                        <option value="impacto">Memorando modelo para pedido de impacto</option>
+                        <option value="folha">Memorando modelo de pagamento em folha</option>
+                      </select>
                     </div>
-                  <?php endforeach; ?>
-                </div>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">Destinatários (unidades)</label>
-                <div class="border rounded p-2" style="max-height: 240px; overflow:auto;">
-                  <?php foreach ($unidades as $unidade): ?>
-                    <div class="form-check">
-                      <input class="form-check-input" type="checkbox" name="dest_unidades[]" value="<?= (int)$unidade['id_unidade'] ?>" id="unit-<?= (int)$unidade['id_unidade'] ?>">
-                      <label class="form-check-label" for="unit-<?= (int)$unidade['id_unidade'] ?>">
-                        <?= h($unidade['nome']) ?>
-                      </label>
+                    <textarea id="docConteudo" name="conteudo"></textarea>
+                  </div>
+                  <div class="tab-pane fade" id="dest-pane" role="tabpanel" aria-labelledby="dest-tab">
+                    <div class="mb-3">
+                      <label class="form-label">Pesquisar destinatários</label>
+                      <input type="text" class="form-control" id="searchDestinatarios" placeholder="Buscar usuário ou unidade">
                     </div>
-                  <?php endforeach; ?>
-                </div>
-              </div>
-              <div class="col-12">
-                <label class="form-label">Assinaturas (ordem)</label>
-                <div class="border rounded p-2" style="max-height: 200px; overflow:auto;">
-                  <?php foreach ($usuarios as $usuario): ?>
-                    <div class="form-check">
-                      <input class="form-check-input" type="checkbox" name="sign_usuarios[]" value="<?= (int)$usuario['matricula'] ?>" id="sign-<?= (int)$usuario['matricula'] ?>">
-                      <label class="form-check-label" for="sign-<?= (int)$usuario['matricula'] ?>">
-                        <?= h($usuario['nome']) ?>
-                      </label>
+                    <div class="row g-3">
+                      <div class="col-md-6">
+                        <label class="form-label">Usuários internos</label>
+                        <div class="border rounded p-2" style="max-height: 240px; overflow:auto;">
+                          <?php foreach ($usuarios as $usuario): ?>
+                            <div class="dest-item dest-row" data-label="<?= h($usuario['nome']) ?>">
+                              <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="dest_usuarios[]" value="<?= (int)$usuario['matricula'] ?>" id="user-<?= (int)$usuario['matricula'] ?>">
+                                <label class="form-check-label" for="user-<?= (int)$usuario['matricula'] ?>">
+                                  <?= h($usuario['nome']) ?>
+                                </label>
+                              </div>
+                              <select class="form-select form-select-sm" name="dest_usuarios_pronome[<?= (int)$usuario['matricula'] ?>]">
+                                <option value="">Sem tratamento</option>
+                                <option value="À Sra Prefeita Municipal">À Sra Prefeita Municipal</option>
+                                <option value="Ao Sr Prefeito Municipal">Ao Sr Prefeito Municipal</option>
+                                <option value="À Sra Secretária Municipal">À Sra Secretária Municipal</option>
+                                <option value="Ao Sr Secretário Municipal">Ao Sr Secretário Municipal</option>
+                                <option value="À Sra Diretora">À Sra Diretora</option>
+                                <option value="Ao Sr Diretor">Ao Sr Diretor</option>
+                                <option value="À Sra Coordenadora">À Sra Coordenadora</option>
+                                <option value="Ao Sr Coordenador">Ao Sr Coordenador</option>
+                                <option value="À Sra Presidente">À Sra Presidente</option>
+                                <option value="Ao Sr Presidente">Ao Sr Presidente</option>
+                                <option value="À Sra">À Sra</option>
+                                <option value="Ao Sr">Ao Sr</option>
+                              </select>
+                            </div>
+                          <?php endforeach; ?>
+                        </div>
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label">Unidades</label>
+                        <div class="border rounded p-2" style="max-height: 240px; overflow:auto;">
+                          <?php foreach ($unidades as $unidade): ?>
+                            <div class="dest-item dest-row" data-label="<?= h($unidade['nome']) ?>">
+                              <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="dest_unidades[]" value="<?= (int)$unidade['id_unidade'] ?>" id="unit-<?= (int)$unidade['id_unidade'] ?>">
+                                <label class="form-check-label" for="unit-<?= (int)$unidade['id_unidade'] ?>">
+                                  <?= h($unidade['nome']) ?>
+                                </label>
+                              </div>
+                              <select class="form-select form-select-sm" name="dest_unidades_pronome[<?= (int)$unidade['id_unidade'] ?>]">
+                                <option value="">Sem tratamento</option>
+                                <option value="À Unidade">À Unidade</option>
+                                <option value="Ao Setor">Ao Setor</option>
+                                <option value="À Coordenação">À Coordenação</option>
+                                <option value="À Direção">À Direção</option>
+                                <option value="À Secretaria">À Secretaria</option>
+                              </select>
+                            </div>
+                          <?php endforeach; ?>
+                        </div>
+                      </div>
+                      <div class="col-12">
+                        <label class="form-label">Destinatários externos</label>
+                        <div id="externos"></div>
+                        <button type="button" class="btn btn-outline-secondary btn-sm mt-2" id="addExterno">Adicionar destinatário externo</button>
+                      </div>
                     </div>
-                  <?php endforeach; ?>
+                  </div>
+                  <div class="tab-pane fade" id="sign-pane" role="tabpanel" aria-labelledby="sign-tab">
+                    <div class="mb-3">
+                      <label class="form-label">Pesquisar assinantes</label>
+                      <input type="text" class="form-control" id="searchAssinaturas" placeholder="Buscar usuário">
+                    </div>
+                    <div class="row g-3">
+                      <div class="col-md-7">
+                        <label class="form-label">Usuários disponíveis</label>
+                        <div class="border rounded p-2" style="max-height: 240px; overflow:auto;">
+                          <?php foreach ($usuarios as $usuario): ?>
+                            <div class="form-check sign-item" data-label="<?= h($usuario['nome']) ?>">
+                              <input class="form-check-input sign-checkbox" type="checkbox" value="<?= (int)$usuario['matricula'] ?>" data-label="<?= h($usuario['nome']) ?>" id="sign-<?= (int)$usuario['matricula'] ?>">
+                              <label class="form-check-label" for="sign-<?= (int)$usuario['matricula'] ?>">
+                                <?= h($usuario['nome']) ?>
+                              </label>
+                            </div>
+                          <?php endforeach; ?>
+                        </div>
+                      </div>
+                      <div class="col-md-5">
+                        <label class="form-label">Assinaturas (ordem)</label>
+                        <ol class="list-group list-group-numbered mb-2" id="signOrderList"></ol>
+                        <div class="form-text">A ordem segue a seleção acima.</div>
+                        <div id="signOrderInputs"></div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div class="form-text">A ordem segue a lista acima.</div>
-              </div>
-              <div class="col-12">
-                <label class="form-label">Destinatários externos</label>
-                <div id="externos"></div>
-                <button type="button" class="btn btn-outline-secondary btn-sm mt-2" id="addExterno">Adicionar destinatário externo</button>
               </div>
             </div>
           </div>
@@ -462,11 +566,164 @@ $statusClasses = [
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
   <script>
-    const quill = new Quill('#editor', { theme: 'snow' });
+    tinymce.init({
+      selector: '#docConteudo',
+      height: 360,
+      menubar: false,
+      branding: false,
+      plugins: 'lists link image table code',
+      toolbar: 'undo redo | styles | bold italic underline | alignleft aligncenter alignright | bullist numlist | table | link image | code',
+      toolbar_mode: 'wrap',
+      toolbar_groups: {
+        format: { icon: 'bold', tooltip: 'Formatação' }
+      },
+      toolbar1: 'undo redo | styles | bold italic underline | alignleft aligncenter alignright',
+      toolbar2: 'bullist numlist | table | link image | code',
+      statusbar: false,
+      image_title: true,
+      automatic_uploads: false,
+      images_upload_handler: (blobInfo, progress) => new Promise((resolve) => {
+        const base64 = 'data:' + blobInfo.blob().type + ';base64,' + blobInfo.base64();
+        resolve(base64);
+      }),
+      content_style: 'body { font-family: "Segoe UI", sans-serif; font-size: 14px; } table { width: 100%; border-collapse: collapse; } td, th { border: 1px solid #94a3b8; padding: 6px 8px; }',
+    });
+
     document.getElementById('docForm').addEventListener('submit', () => {
-      document.getElementById('conteudo').value = quill.root.innerHTML;
+      if (window.tinymce) {
+        tinymce.triggerSave();
+      }
+    });
+
+    const modelosMemorando = {
+      contratacao: `
+        <p>Prezada,</p>
+        <p>Na oportunidade em que a cumprimento muito cordialmente, venho por meio deste solicitar a contratação temporária conforme dados abaixo:</p>
+        <table>
+          <tr><th colspan="2">Dados necessários para a Contratação Temporária:</th></tr>
+          <tr><td>Cargo</td><td></td></tr>
+          <tr><td>Quantidade</td><td></td></tr>
+          <tr><td>Carga horária</td><td></td></tr>
+          <tr><td>Nº da Lei Autorizativa</td><td></td></tr>
+          <tr><td>Nº do Projeto de Lei</td><td></td></tr>
+          <tr><td>Nº do Impacto</td><td></td></tr>
+          <tr><td>Nº do PSS ou Concurso</td><td></td></tr>
+          <tr><td>Centro de Custo</td><td></td></tr>
+          <tr><td>Local de trabalho</td><td></td></tr>
+          <tr><td>Horário de trabalho</td><td></td></tr>
+          <tr><td>Substituição/Demanda<br><small>Obs: Se for substituição informar o nome do servidor substituído.</small></td><td></td></tr>
+        </table>
+        <p>Sem mais para o momento,</p>
+        <p>Atenciosamente,</p>
+      `,
+      nomeacao: `
+        <p>Prezada,</p>
+        <p>Na oportunidade em que a cumprimento muito cordialmente, venho por meio deste solicitar a nomeação para provimento de cargo efetivo conforme dados abaixo:</p>
+        <table>
+          <tr><th colspan="2">Dados necessários para a Nomeação:</th></tr>
+          <tr><td>Cargo</td><td></td></tr>
+          <tr><td>Quantidade</td><td></td></tr>
+          <tr><td>Carga horária</td><td></td></tr>
+          <tr><td>Nº Concurso</td><td></td></tr>
+          <tr><td>Classificação</td><td></td></tr>
+          <tr><td>Nº do Impacto</td><td></td></tr>
+          <tr><td>Centro de Custo</td><td></td></tr>
+          <tr><td>Local de trabalho</td><td></td></tr>
+          <tr><td>Horário de trabalho</td><td></td></tr>
+          <tr><td>Vacância ou Vaga criada<br><small>Obs: No caso de vacância, informar o servidor que deu origem.</small></td><td></td></tr>
+        </table>
+        <p>Sem mais para o momento,</p>
+        <p>Atenciosamente,</p>
+      `,
+      impacto: `
+        <p>Prezada (o),</p>
+        <p>Na oportunidade em que a (o) cumprimento muito cordialmente, venho por meio deste requerer seu despacho favorável para a seguinte demanda:</p>
+        <table>
+          <tr><th colspan="2">Dados necessários para requerer IMPACTO ORÇAMENTÁRIO</th></tr>
+          <tr><td>Cargo:</td><td></td></tr>
+          <tr><td>Quantidade</td><td></td></tr>
+          <tr><td>Natureza</td><td>( ) Efetivo &nbsp;&nbsp;&nbsp; ( ) Contrato</td></tr>
+          <tr><td>Motivo da necessidade:</td><td></td></tr>
+          <tr><td>Nome do servidor substituído (caso houver):</td><td></td></tr>
+        </table>
+        <p style="text-align:center">_______________________________<br>Assinatura do Secretário da pasta</p>
+        <p>( ) Defiro conforme solicitado, encaminhe-se ao DRH para o devido planejamento de custos</p>
+        <p>( ) Indefiro o presente pedido.</p>
+        <p>Gabinete da Prefeita, ____/____/________</p>
+      `,
+      folha: `
+        <p>Prezada (o),</p>
+        <p>Na oportunidade em que a (o) cumprimento muito cordialmente, venho por meio deste requerer seu despacho favorável para a seguinte demanda:</p>
+        <table>
+          <tr><th colspan="2">Dados necessários para lançamento em FOLHA DE PAGAMENTO.<br>Data limite de envio: dia 15 de cada mês.</th></tr>
+          <tr><td colspan="2"><small>Obs: os pedidos enviados após esta data serão lançados na competência seguinte, não havendo possibilidade de cálculo de folha complementar.</small></td></tr>
+          <tr><td>Nome do servidor:</td><td></td></tr>
+          <tr><td>Matrícula com o dígito:</td><td></td></tr>
+          <tr><td>Cargo:</td><td></td></tr>
+          <tr><td>( ) Concessão &nbsp;&nbsp;&nbsp; ( ) Cancelamento</td><td>
+            ( ) Regime suplementar &nbsp; ( ) Agente de Contratação<br>
+            ( ) Gratificação 20% &nbsp; ( ) Diferença de Caixa<br>
+            ( ) Gratificação 40% &nbsp; ( ) Fiscalização externa<br>
+            ( ) Insalubridade &nbsp; ( ) Gratificação ESF<br>
+            ( ) Periculosidade &nbsp; ( ) FG 1<br>
+            ( ) Verba plantão e disponibilidade &nbsp; ( ) FG 2<br>
+            ( ) Adicional de sobreaviso &nbsp; ( ) FG 3<br>
+            ( ) Subsídio de secretário &nbsp; ( ) FG 4<br>
+            ( ) CAS &nbsp; ( ) FG 5<br>
+            ( ) Sindicância &nbsp; ( ) outros __________________
+          </td></tr>
+          <tr><td>Dispositivo legal da verba (Nº da Lei, art., incisos, alíneas, etc.)</td><td></td></tr>
+          <tr><td>Nº de horas (no caso de regime suplementar):</td><td></td></tr>
+          <tr><td>Valor:</td><td></td></tr>
+          <tr><td>Data de início:</td><td></td></tr>
+          <tr><td>Data de término - último dia:</td><td></td></tr>
+          <tr><td>Local de trabalho:</td><td></td></tr>
+          <tr><td>Nome do servidor substituído (caso houver):</td><td></td></tr>
+          <tr><td>Motivo da substituição (caso houver):</td><td></td></tr>
+        </table>
+        <p style="text-align:center">_______________________________<br>Assinatura do Secretário da pasta</p>
+        <p>( ) Defiro conforme solicitado, encaminhe-se ao DRH para o devido lançamento/cancelamento em folha.</p>
+        <p>( ) Indefiro o presente pedido.</p>
+        <p>Gabinete da Prefeita, ____/____/________</p>
+        <p style="text-align:center">_______________________________<br>Assinatura e carimbo do ordenador de despesa</p>
+        <p><strong>Recebido no DRH em :</strong> ____/____/________</p>
+        <p><strong>Assinatura de quem recebeu:</strong> ____________________</p>
+        <p>( ) Atendido conforme solicitado</p>
+        <p>( ) Indeferido</p>
+        <p>Nome do servidor que atendeu o pedido:</p>
+        <p>Portaria solicitada em ____/____/______</p>
+      `
+    };
+
+    const memorandoSelect = document.getElementById('memorandoModelo');
+    if (memorandoSelect) {
+      memorandoSelect.addEventListener('change', () => {
+        const key = memorandoSelect.value;
+        if (!key) return;
+        const editor = tinymce.get('docConteudo');
+        if (!editor) return;
+        const current = editor.getContent({ format: 'text' }).trim();
+        if (current.length > 0) {
+          const ok = window.confirm('Substituir o texto atual pelo modelo selecionado?');
+          if (!ok) {
+            memorandoSelect.value = '';
+            return;
+          }
+        }
+        editor.setContent(modelosMemorando[key] || '');
+      });
+    }
+
+    document.querySelectorAll('button[data-bs-toggle="tab"]').forEach((tab) => {
+      tab.addEventListener('shown.bs.tab', (event) => {
+        if (event.target && event.target.id === 'content-tab') {
+          const editor = tinymce.get('docConteudo');
+          if (editor) {
+            editor.focus();
+          }
+        }
+      });
     });
 
     const externosContainer = document.getElementById('externos');
@@ -488,12 +745,92 @@ $statusClasses = [
         <div class="col-md-3">
           <input class="form-control" name="dest_externos[${externoIndex}][endereco]" placeholder="Endereço">
         </div>
+        <div class="col-md-4">
+          <select class="form-select" name="dest_externos[${externoIndex}][pronome]">
+            <option value="">Sem tratamento</option>
+            <option value="À Sra Prefeita Municipal">À Sra Prefeita Municipal</option>
+            <option value="Ao Sr Prefeito Municipal">Ao Sr Prefeito Municipal</option>
+            <option value="À Sra Secretária Municipal">À Sra Secretária Municipal</option>
+            <option value="Ao Sr Secretário Municipal">Ao Sr Secretário Municipal</option>
+            <option value="À Sra Diretora">À Sra Diretora</option>
+            <option value="Ao Sr Diretor">Ao Sr Diretor</option>
+            <option value="À Sra Coordenadora">À Sra Coordenadora</option>
+            <option value="Ao Sr Coordenador">Ao Sr Coordenador</option>
+            <option value="À Sra Presidente">À Sra Presidente</option>
+            <option value="Ao Sr Presidente">Ao Sr Presidente</option>
+            <option value="À Sra">À Sra</option>
+            <option value="Ao Sr">Ao Sr</option>
+          </select>
+        </div>
       `;
       externosContainer.appendChild(wrapper);
       externoIndex += 1;
     }
     addExternoBtn.addEventListener('click', addExterno);
     addExterno();
+
+    const destSearch = document.getElementById('searchDestinatarios');
+    const destItems = Array.from(document.querySelectorAll('.dest-item'));
+    function normalizeText(value) {
+      return (value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+    }
+    if (destSearch) {
+      destSearch.addEventListener('input', () => {
+        const term = normalizeText(destSearch.value.trim());
+        destItems.forEach((item) => {
+          const label = normalizeText(item.getAttribute('data-label'));
+          item.style.display = label.includes(term) ? '' : 'none';
+        });
+      });
+    }
+
+    const signSearch = document.getElementById('searchAssinaturas');
+    const signItems = Array.from(document.querySelectorAll('.sign-item'));
+    if (signSearch) {
+      signSearch.addEventListener('input', () => {
+        const term = normalizeText(signSearch.value.trim());
+        signItems.forEach((item) => {
+          const label = normalizeText(item.getAttribute('data-label'));
+          item.style.display = label.includes(term) ? '' : 'none';
+        });
+      });
+    }
+
+    const signOrder = [];
+    const signOrderList = document.getElementById('signOrderList');
+    const signOrderInputs = document.getElementById('signOrderInputs');
+    function renderSignOrder() {
+      signOrderList.innerHTML = '';
+      signOrderInputs.innerHTML = '';
+      signOrder.forEach((item) => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item';
+        li.textContent = item.label;
+        signOrderList.appendChild(li);
+
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'sign_usuarios[]';
+        input.value = item.value;
+        signOrderInputs.appendChild(input);
+      });
+    }
+    document.querySelectorAll('.sign-checkbox').forEach((checkbox) => {
+      checkbox.addEventListener('change', () => {
+        const value = checkbox.value;
+        const label = checkbox.getAttribute('data-label') || '';
+        const index = signOrder.findIndex((item) => item.value === value);
+        if (checkbox.checked && index === -1) {
+          signOrder.push({ value, label });
+        } else if (!checkbox.checked && index !== -1) {
+          signOrder.splice(index, 1);
+        }
+        renderSignOrder();
+      });
+    });
   </script>
 </body>
 </html>
