@@ -299,6 +299,34 @@ $statusClasses = [
                     <a class="btn btn-sm btn-outline-primary" href="pdf.php?doc=<?= (int)$documento['id'] ?>" target="_blank">Baixar PDF</a>
                   <?php endif; ?>
                   <?php if ((int)$documento['criado_por'] === $matricula): ?>
+                    <?php
+                      $destUsuariosIds = [];
+                      $destUnidadesIds = [];
+                      $destUsuariosPronome = [];
+                      $destUnidadesPronome = [];
+                      $destExternos = [];
+                      foreach ($destinatarios as $d) {
+                          if ($d['tipo_destino'] === 'interno') {
+                              if (!empty($d['usuario_destino'])) {
+                                  $destUsuariosIds[] = (int)$d['usuario_destino'];
+                                  $destUsuariosPronome[] = ['id' => (int)$d['usuario_destino'], 'pronome' => $d['pronome_tratamento'] ?? ''];
+                              }
+                              if (!empty($d['id_unidade_destino'])) {
+                                  $destUnidadesIds[] = (int)$d['id_unidade_destino'];
+                                  $destUnidadesPronome[] = ['id' => (int)$d['id_unidade_destino'], 'pronome' => $d['pronome_tratamento'] ?? ''];
+                              }
+                          } else {
+                              $destExternos[] = [
+                                  'nome' => $d['nome_externo'] ?? '',
+                                  'orgao' => $d['orgao_externo'] ?? '',
+                                  'email' => $d['email_externo'] ?? '',
+                                  'endereco' => $d['endereco_externo'] ?? '',
+                                  'pronome' => $d['pronome_tratamento'] ?? ''
+                              ];
+                          }
+                      }
+                      $signUsuariosIds = array_map(static fn($a) => (int)$a['usuario'], $assinaturas);
+                    ?>
                     <button
                       class="btn btn-sm btn-outline-warning"
                       type="button"
@@ -308,12 +336,12 @@ $statusClasses = [
                       data-assunto="<?= h($documento['assunto']) ?>"
                       data-confidencial="<?= (int)$documento['confidencial'] ?>"
                       data-conteudo="<?= h(base64_encode($versao['conteudo'] ?? '')) ?>"
-                      data-destusuarios="<?= h(base64_encode(json_encode(array_values(array_filter(array_map(fn($d) => $d['tipo_destino']==='interno' && $d['usuario_destino'] ? (int)$d['usuario_destino'] : null, $destinatarios))))) ?>"
-                      data-destunidades="<?= h(base64_encode(json_encode(array_values(array_filter(array_map(fn($d) => $d['tipo_destino']==='interno' && $d['id_unidade_destino'] ? (int)$d['id_unidade_destino'] : null, $destinatarios))))) ?>"
-                      data-destusuariospronome="<?= h(base64_encode(json_encode(array_filter(array_map(fn($d) => $d['tipo_destino']==='interno' && $d['usuario_destino'] ? ['id'=>(int)$d['usuario_destino'],'pronome'=>$d['pronome_tratamento']??''] : null, $destinatarios))))) ?>"
-                      data-destunidadespronome="<?= h(base64_encode(json_encode(array_filter(array_map(fn($d) => $d['tipo_destino']==='interno' && $d['id_unidade_destino'] ? ['id'=>(int)$d['id_unidade_destino'],'pronome'=>$d['pronome_tratamento']??''] : null, $destinatarios))))) ?>"
-                      data-destexternos="<?= h(base64_encode(json_encode(array_values(array_filter(array_map(fn($d) => $d['tipo_destino']==='externo' ? ['nome'=>$d['nome_externo']??'','orgao'=>$d['orgao_externo']??'','email'=>$d['email_externo']??'','endereco'=>$d['endereco_externo']??'','pronome'=>$d['pronome_tratamento']??''] : null, $destinatarios))))) ?>"
-                      data-signusuarios="<?= h(base64_encode(json_encode(array_map(fn($a)=> (int)$a['usuario'], $assinaturas)))) ?>"
+                      data-destusuarios="<?= h(base64_encode(json_encode($destUsuariosIds))) ?>"
+                      data-destunidades="<?= h(base64_encode(json_encode($destUnidadesIds))) ?>"
+                      data-destusuariospronome="<?= h(base64_encode(json_encode($destUsuariosPronome))) ?>"
+                      data-destunidadespronome="<?= h(base64_encode(json_encode($destUnidadesPronome))) ?>"
+                      data-destexternos="<?= h(base64_encode(json_encode($destExternos))) ?>"
+                      data-signusuarios="<?= h(base64_encode(json_encode($signUsuariosIds))) ?>"
                     >Editar</button>
                   <?php endif; ?>
                 </div>
