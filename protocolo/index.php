@@ -58,6 +58,7 @@ $versao = null;
 $numeracao = null;
 $anexos = [];
 $assinaturas = [];
+$auditoria = [];
 $isModeloOficial = false;
 if ($docId > 0) {
     $stmt = $conn->prepare('
@@ -137,6 +138,18 @@ if ($docId > 0) {
         $stmt->bind_param('i', $docId);
         $stmt->execute();
         $assinaturas = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
+
+        $stmt = $conn->prepare('
+            SELECT a.*, u.nome AS usuario_nome
+            FROM doc_auditoria a
+            LEFT JOIN usuarios u ON u.matricula = a.usuario
+            WHERE a.entidade = "documento" AND a.entidade_id = ?
+            ORDER BY a.criado_em DESC
+        ');
+        $stmt->bind_param('i', $docId);
+        $stmt->execute();
+        $auditoria = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $stmt->close();
     }
 }
@@ -285,6 +298,24 @@ $statusClasses = [
                     <a class="btn btn-sm btn-outline-secondary" href="print.php?doc=<?= (int)$documento['id'] ?>" target="_blank">Imprimir</a>
                     <a class="btn btn-sm btn-outline-primary" href="pdf.php?doc=<?= (int)$documento['id'] ?>" target="_blank">Baixar PDF</a>
                   <?php endif; ?>
+                  <?php if ((int)$documento['criado_por'] === $matricula): ?>
+                    <button
+                      class="btn btn-sm btn-outline-warning"
+                      type="button"
+                      data-bs-toggle="modal"
+                      data-bs-target="#editModal"
+                      data-id="<?= (int)$documento['id'] ?>"
+                      data-assunto="<?= h($documento['assunto']) ?>"
+                      data-confidencial="<?= (int)$documento['confidencial'] ?>"
+                      data-conteudo="<?= h(base64_encode($versao['conteudo'] ?? '')) ?>"
+                      data-destusuarios="<?= h(base64_encode(json_encode(array_values(array_filter(array_map(fn($d) => $d['tipo_destino']==='interno' && $d['usuario_destino'] ? (int)$d['usuario_destino'] : null, $destinatarios))))) ?>"
+                      data-destunidades="<?= h(base64_encode(json_encode(array_values(array_filter(array_map(fn($d) => $d['tipo_destino']==='interno' && $d['id_unidade_destino'] ? (int)$d['id_unidade_destino'] : null, $destinatarios))))) ?>"
+                      data-destusuariospronome="<?= h(base64_encode(json_encode(array_filter(array_map(fn($d) => $d['tipo_destino']==='interno' && $d['usuario_destino'] ? ['id'=>(int)$d['usuario_destino'],'pronome'=>$d['pronome_tratamento']??''] : null, $destinatarios))))) ?>"
+                      data-destunidadespronome="<?= h(base64_encode(json_encode(array_filter(array_map(fn($d) => $d['tipo_destino']==='interno' && $d['id_unidade_destino'] ? ['id'=>(int)$d['id_unidade_destino'],'pronome'=>$d['pronome_tratamento']??''] : null, $destinatarios))))) ?>"
+                      data-destexternos="<?= h(base64_encode(json_encode(array_values(array_filter(array_map(fn($d) => $d['tipo_destino']==='externo' ? ['nome'=>$d['nome_externo']??'','orgao'=>$d['orgao_externo']??'','email'=>$d['email_externo']??'','endereco'=>$d['endereco_externo']??'','pronome'=>$d['pronome_tratamento']??''] : null, $destinatarios))))) ?>"
+                      data-signusuarios="<?= h(base64_encode(json_encode(array_map(fn($a)=> (int)$a['usuario'], $assinaturas)))) ?>"
+                    >Editar</button>
+                  <?php endif; ?>
                 </div>
               </div>
 
@@ -328,6 +359,24 @@ $statusClasses = [
                           <div class="text-muted small">Ordem <?= (int)$ass['ordem'] ?></div>
                         </div>
                         <span class="badge text-bg-light border badge-status"><?= h($ass['status']) ?></span>
+                      </li>
+                    <?php endforeach; ?>
+                  </ul>
+                <?php endif; ?>
+              </div>
+
+              <div class="mb-3">
+                <div class="text-muted small">Histórico</div>
+                <?php if (empty($auditoria)): ?>
+                  <div class="text-muted">Nenhum registro.</div>
+                <?php else: ?>
+                  <ul class="list-group list-group-flush">
+                    <?php foreach ($auditoria as $log): ?>
+                      <li class="list-group-item">
+                        <div class="fw-semibold"><?= h($log['evento']) ?></div>
+                        <div class="text-muted small">
+                          <?= h($log['usuario_nome'] ?? 'Sistema') ?> • <?= date('d/m/Y H:i', strtotime($log['criado_em'])) ?>
+                        </div>
                       </li>
                     <?php endforeach; ?>
                   </ul>
@@ -565,10 +614,123 @@ $statusClasses = [
     </div>
   </div>
 
+  <div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="editModalLabel">Editar documento</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <form method="post" action="actions/document_edit.php" id="editForm">
+          <div class="modal-body">
+            <input type="hidden" name="documento_id" id="editDocumentoId">
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Assunto</label>
+                <input type="text" class="form-control" name="assunto" id="editAssunto" required>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Confidencial</label>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="confidencial" id="editConfidencial">
+                  <label class="form-check-label" for="editConfidencial">Sim</label>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Conteúdo</label>
+                <textarea id="docConteudoEdit" name="conteudo"></textarea>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Destinatários (usuários)</label>
+                <div class="border rounded p-2" style="max-height: 200px; overflow:auto;">
+                  <?php foreach ($usuarios as $usuario): ?>
+                    <div class="dest-item dest-row" data-label="<?= h($usuario['nome']) ?>">
+                      <div class="form-check">
+                        <input class="form-check-input edit-dest-user" type="checkbox" name="dest_usuarios[]" value="<?= (int)$usuario['matricula'] ?>" id="edit-user-<?= (int)$usuario['matricula'] ?>">
+                        <label class="form-check-label" for="edit-user-<?= (int)$usuario['matricula'] ?>">
+                          <?= h($usuario['nome']) ?>
+                        </label>
+                      </div>
+                      <select class="form-select form-select-sm edit-dest-user-pronome" name="dest_usuarios_pronome[<?= (int)$usuario['matricula'] ?>]">
+                        <option value="">Sem tratamento</option>
+                        <option value="À Sra Prefeita Municipal">À Sra Prefeita Municipal</option>
+                        <option value="Ao Sr Prefeito Municipal">Ao Sr Prefeito Municipal</option>
+                        <option value="À Sra Secretária Municipal">À Sra Secretária Municipal</option>
+                        <option value="Ao Sr Secretário Municipal">Ao Sr Secretário Municipal</option>
+                        <option value="À Sra Diretora">À Sra Diretora</option>
+                        <option value="Ao Sr Diretor">Ao Sr Diretor</option>
+                        <option value="À Sra Coordenadora">À Sra Coordenadora</option>
+                        <option value="Ao Sr Coordenador">Ao Sr Coordenador</option>
+                        <option value="À Sra Presidente">À Sra Presidente</option>
+                        <option value="Ao Sr Presidente">Ao Sr Presidente</option>
+                        <option value="À Sra">À Sra</option>
+                        <option value="Ao Sr">Ao Sr</option>
+                      </select>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Destinatários (unidades)</label>
+                <div class="border rounded p-2" style="max-height: 200px; overflow:auto;">
+                  <?php foreach ($unidades as $unidade): ?>
+                    <div class="dest-item dest-row" data-label="<?= h($unidade['nome']) ?>">
+                      <div class="form-check">
+                        <input class="form-check-input edit-dest-unit" type="checkbox" name="dest_unidades[]" value="<?= (int)$unidade['id_unidade'] ?>" id="edit-unit-<?= (int)$unidade['id_unidade'] ?>">
+                        <label class="form-check-label" for="edit-unit-<?= (int)$unidade['id_unidade'] ?>">
+                          <?= h($unidade['nome']) ?>
+                        </label>
+                      </div>
+                      <select class="form-select form-select-sm edit-dest-unit-pronome" name="dest_unidades_pronome[<?= (int)$unidade['id_unidade'] ?>]">
+                        <option value="">Sem tratamento</option>
+                        <option value="À Unidade">À Unidade</option>
+                        <option value="Ao Setor">Ao Setor</option>
+                        <option value="À Coordenação">À Coordenação</option>
+                        <option value="À Direção">À Direção</option>
+                        <option value="À Secretaria">À Secretaria</option>
+                      </select>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Destinatários externos</label>
+                <div id="externosEdit"></div>
+                <button type="button" class="btn btn-outline-secondary btn-sm mt-2" id="addExternoEdit">Adicionar destinatário externo</button>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Assinaturas (ordem)</label>
+                <div class="border rounded p-2" style="max-height: 200px; overflow:auto;">
+                  <?php foreach ($usuarios as $usuario): ?>
+                    <div class="form-check">
+                      <input class="form-check-input edit-sign" type="checkbox" value="<?= (int)$usuario['matricula'] ?>" data-label="<?= h($usuario['nome']) ?>" id="edit-sign-<?= (int)$usuario['matricula'] ?>">
+                      <label class="form-check-label" for="edit-sign-<?= (int)$usuario['matricula'] ?>">
+                        <?= h($usuario['nome']) ?>
+                      </label>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+                <div class="mt-2">
+                  <label class="form-label">Ordem das assinaturas (arraste para reordenar)</label>
+                  <ol class="list-group list-group-numbered" id="editSignOrderList"></ol>
+                  <div id="editSignOrderInputs"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Salvar alterações</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
   <script>
     tinymce.init({
-      selector: '#docConteudo',
+      selector: '#docConteudo, #docConteudoEdit',
       height: 360,
       menubar: false,
       branding: false,
@@ -591,6 +753,11 @@ $statusClasses = [
     });
 
     document.getElementById('docForm').addEventListener('submit', () => {
+      if (window.tinymce) {
+        tinymce.triggerSave();
+      }
+    });
+    document.getElementById('editForm').addEventListener('submit', () => {
       if (window.tinymce) {
         tinymce.triggerSave();
       }
@@ -715,6 +882,176 @@ $statusClasses = [
       });
     }
 
+    const editModal = document.getElementById('editModal');
+    if (editModal) {
+      editModal.addEventListener('show.bs.modal', (event) => {
+        const button = event.relatedTarget;
+        if (!button) return;
+        const docId = button.getAttribute('data-id');
+        const assunto = button.getAttribute('data-assunto') || '';
+        const confidencial = button.getAttribute('data-confidencial') === '1';
+        const conteudoBase64 = button.getAttribute('data-conteudo') || '';
+        const destUsuarios = button.getAttribute('data-destusuarios') || '';
+        const destUnidades = button.getAttribute('data-destunidades') || '';
+        const destExternos = button.getAttribute('data-destexternos') || '';
+        const signUsuarios = button.getAttribute('data-signusuarios') || '';
+        const destUsuariosPronome = button.getAttribute('data-destusuariospronome') || '';
+        const destUnidadesPronome = button.getAttribute('data-destunidadespronome') || '';
+
+        document.getElementById('editDocumentoId').value = docId || '';
+        document.getElementById('editAssunto').value = assunto;
+        document.getElementById('editConfidencial').checked = confidencial;
+
+        const editor = tinymce.get('docConteudoEdit');
+        if (editor) {
+          const html = conteudoBase64 ? atob(conteudoBase64) : '';
+          editor.setContent(html);
+        }
+
+        const selectedUsers = destUsuarios ? JSON.parse(atob(destUsuarios)) : [];
+        const selectedUnits = destUnidades ? JSON.parse(atob(destUnidades)) : [];
+        const selectedSigns = signUsuarios ? JSON.parse(atob(signUsuarios)) : [];
+        document.querySelectorAll('.edit-dest-user').forEach((el) => {
+          el.checked = selectedUsers.includes(parseInt(el.value, 10));
+        });
+        document.querySelectorAll('.edit-dest-unit').forEach((el) => {
+          el.checked = selectedUnits.includes(parseInt(el.value, 10));
+        });
+
+        const userPronomeMap = {};
+        const unitPronomeMap = {};
+        const userPronomeData = destUsuariosPronome ? JSON.parse(atob(destUsuariosPronome)) : [];
+        const unitPronomeData = destUnidadesPronome ? JSON.parse(atob(destUnidadesPronome)) : [];
+        userPronomeData.forEach((item) => {
+          if (item && item.id) userPronomeMap[item.id] = item.pronome || '';
+        });
+        unitPronomeData.forEach((item) => {
+          if (item && item.id) unitPronomeMap[item.id] = item.pronome || '';
+        });
+        document.querySelectorAll('.edit-dest-user-pronome').forEach((el) => {
+          const id = parseInt(el.name.match(/\[(\d+)\]/)?.[1] || '0', 10);
+          if (userPronomeMap[id] !== undefined) el.value = userPronomeMap[id];
+        });
+        document.querySelectorAll('.edit-dest-unit-pronome').forEach((el) => {
+          const id = parseInt(el.name.match(/\[(\d+)\]/)?.[1] || '0', 10);
+          if (unitPronomeMap[id] !== undefined) el.value = unitPronomeMap[id];
+        });
+
+        const externosEdit = document.getElementById('externosEdit');
+        externosEdit.innerHTML = '';
+        const externosData = destExternos ? JSON.parse(atob(destExternos)) : [];
+        let idx = 0;
+        externosData.forEach((ext) => {
+          const row = document.createElement('div');
+          row.className = 'row g-2 mb-2';
+          row.innerHTML = `
+            <div class="col-md-3">
+              <input class="form-control" name="dest_externos[${idx}][nome]" placeholder="Nome" value="${(ext.nome || '').replace(/"/g, '&quot;')}">
+            </div>
+            <div class="col-md-3">
+              <input class="form-control" name="dest_externos[${idx}][orgao]" placeholder="Órgão" value="${(ext.orgao || '').replace(/"/g, '&quot;')}">
+            </div>
+            <div class="col-md-3">
+              <input class="form-control" name="dest_externos[${idx}][email]" placeholder="E-mail" value="${(ext.email || '').replace(/"/g, '&quot;')}">
+            </div>
+            <div class="col-md-3">
+              <input class="form-control" name="dest_externos[${idx}][endereco]" placeholder="Endereço" value="${(ext.endereco || '').replace(/"/g, '&quot;')}">
+            </div>
+            <div class="col-md-4">
+              <select class="form-select" name="dest_externos[${idx}][pronome]">
+                <option value="">Sem tratamento</option>
+                <option value="À Sra Prefeita Municipal">À Sra Prefeita Municipal</option>
+                <option value="Ao Sr Prefeito Municipal">Ao Sr Prefeito Municipal</option>
+                <option value="À Sra Secretária Municipal">À Sra Secretária Municipal</option>
+                <option value="Ao Sr Secretário Municipal">Ao Sr Secretário Municipal</option>
+                <option value="À Sra Diretora">À Sra Diretora</option>
+                <option value="Ao Sr Diretor">Ao Sr Diretor</option>
+                <option value="À Sra Coordenadora">À Sra Coordenadora</option>
+                <option value="Ao Sr Coordenador">Ao Sr Coordenador</option>
+                <option value="À Sra Presidente">À Sra Presidente</option>
+                <option value="Ao Sr Presidente">Ao Sr Presidente</option>
+                <option value="À Sra">À Sra</option>
+                <option value="Ao Sr">Ao Sr</option>
+              </select>
+            </div>
+          `;
+          externosEdit.appendChild(row);
+          if (ext.pronome) {
+            const sel = row.querySelector('select');
+            sel.value = ext.pronome;
+          }
+          idx += 1;
+        });
+
+        const editSignOrderList = document.getElementById('editSignOrderList');
+        const editSignOrderInputs = document.getElementById('editSignOrderInputs');
+        const editSignOrder = [];
+        function renderEditOrder() {
+          editSignOrderList.innerHTML = '';
+          editSignOrderInputs.innerHTML = '';
+          editSignOrder.forEach((item, index) => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-center';
+            li.draggable = true;
+            li.dataset.value = item.value;
+            li.innerHTML = `<span>${item.label}</span><span class="text-muted small">⋮⋮</span>`;
+            editSignOrderList.appendChild(li);
+
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'sign_usuarios[]';
+            input.value = item.value;
+            editSignOrderInputs.appendChild(input);
+          });
+        }
+        const signMap = new Map();
+        document.querySelectorAll('.edit-sign').forEach((el) => {
+          const id = parseInt(el.value, 10);
+          signMap.set(id, el.getAttribute('data-label') || '');
+          el.checked = selectedSigns.includes(id);
+        });
+        selectedSigns.forEach((id) => {
+          const label = signMap.get(id) || ('Usuário #' + id);
+          editSignOrder.push({ value: id, label });
+        });
+        renderEditOrder();
+
+        editSignOrderList.addEventListener('dragstart', (ev) => {
+          ev.dataTransfer.setData('text/plain', ev.target.dataset.value);
+        });
+        editSignOrderList.addEventListener('dragover', (ev) => {
+          ev.preventDefault();
+        });
+        editSignOrderList.addEventListener('drop', (ev) => {
+          ev.preventDefault();
+          const fromId = parseInt(ev.dataTransfer.getData('text/plain'), 10);
+          const toEl = ev.target.closest('li');
+          if (!toEl) return;
+          const toId = parseInt(toEl.dataset.value, 10);
+          const fromIndex = editSignOrder.findIndex((i) => i.value === fromId);
+          const toIndex = editSignOrder.findIndex((i) => i.value === toId);
+          if (fromIndex === -1 || toIndex === -1) return;
+          const [moved] = editSignOrder.splice(fromIndex, 1);
+          editSignOrder.splice(toIndex, 0, moved);
+          renderEditOrder();
+        });
+
+        document.querySelectorAll('.edit-sign').forEach((el) => {
+          el.addEventListener('change', () => {
+            const id = parseInt(el.value, 10);
+            const label = el.getAttribute('data-label') || ('Usuário #' + id);
+            const index = editSignOrder.findIndex((i) => i.value === id);
+            if (el.checked && index === -1) {
+              editSignOrder.push({ value: id, label });
+            } else if (!el.checked && index !== -1) {
+              editSignOrder.splice(index, 1);
+            }
+            renderEditOrder();
+          });
+        });
+      });
+    }
+
     document.querySelectorAll('button[data-bs-toggle="tab"]').forEach((tab) => {
       tab.addEventListener('shown.bs.tab', (event) => {
         if (event.target && event.target.id === 'content-tab') {
@@ -797,6 +1134,50 @@ $statusClasses = [
           item.style.display = label.includes(term) ? '' : 'none';
         });
       });
+    }
+
+    const externosEdit = document.getElementById('externosEdit');
+    const addExternoEdit = document.getElementById('addExternoEdit');
+    let externoEditIndex = 0;
+    function addExternoRowEdit() {
+      const row = document.createElement('div');
+      row.className = 'row g-2 mb-2';
+      row.innerHTML = `
+        <div class="col-md-3">
+          <input class="form-control" name="dest_externos[${externoEditIndex}][nome]" placeholder="Nome">
+        </div>
+        <div class="col-md-3">
+          <input class="form-control" name="dest_externos[${externoEditIndex}][orgao]" placeholder="Órgão">
+        </div>
+        <div class="col-md-3">
+          <input class="form-control" name="dest_externos[${externoEditIndex}][email]" placeholder="E-mail">
+        </div>
+        <div class="col-md-3">
+          <input class="form-control" name="dest_externos[${externoEditIndex}][endereco]" placeholder="Endereço">
+        </div>
+        <div class="col-md-4">
+          <select class="form-select" name="dest_externos[${externoEditIndex}][pronome]">
+            <option value="">Sem tratamento</option>
+            <option value="À Sra Prefeita Municipal">À Sra Prefeita Municipal</option>
+            <option value="Ao Sr Prefeito Municipal">Ao Sr Prefeito Municipal</option>
+            <option value="À Sra Secretária Municipal">À Sra Secretária Municipal</option>
+            <option value="Ao Sr Secretário Municipal">Ao Sr Secretário Municipal</option>
+            <option value="À Sra Diretora">À Sra Diretora</option>
+            <option value="Ao Sr Diretor">Ao Sr Diretor</option>
+            <option value="À Sra Coordenadora">À Sra Coordenadora</option>
+            <option value="Ao Sr Coordenador">Ao Sr Coordenador</option>
+            <option value="À Sra Presidente">À Sra Presidente</option>
+            <option value="Ao Sr Presidente">Ao Sr Presidente</option>
+            <option value="À Sra">À Sra</option>
+            <option value="Ao Sr">Ao Sr</option>
+          </select>
+        </div>
+      `;
+      externosEdit.appendChild(row);
+      externoEditIndex += 1;
+    }
+    if (addExternoEdit) {
+      addExternoEdit.addEventListener('click', addExternoRowEdit);
     }
 
     const signOrder = [];

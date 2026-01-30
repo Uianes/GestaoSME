@@ -11,19 +11,10 @@ if (!user_can_access_system('protocolo')) {
 }
 
 $matricula = (int)($_SESSION['user']['matricula'] ?? 0);
-if ($matricula <= 0) {
-    $_SESSION['flash_error'] = 'Sessão inválida.';
-    header('Location: ../index.php');
-    exit;
-}
-
-$tipoId = (int)($_POST['tipo_id'] ?? 0);
+$documentoId = (int)($_POST['documento_id'] ?? 0);
 $assunto = trim((string)($_POST['assunto'] ?? ''));
 $confidencial = !empty($_POST['confidencial']) ? 1 : 0;
-$nivelSigilo = '';
 $conteudo = trim((string)($_POST['conteudo'] ?? ''));
-$unidadeOrigem = (int)($_POST['id_unidade_origem'] ?? 0);
-
 $destUsuarios = $_POST['dest_usuarios'] ?? [];
 $destUnidades = $_POST['dest_unidades'] ?? [];
 $destExternos = $_POST['dest_externos'] ?? [];
@@ -31,74 +22,34 @@ $signUsuarios = $_POST['sign_usuarios'] ?? [];
 $destUsuariosPronome = $_POST['dest_usuarios_pronome'] ?? [];
 $destUnidadesPronome = $_POST['dest_unidades_pronome'] ?? [];
 
-if ($tipoId <= 0 || $assunto === '' || $unidadeOrigem <= 0) {
-    $_SESSION['flash_error'] = 'Preencha tipo, assunto e unidade de origem.';
+if ($matricula <= 0 || $documentoId <= 0 || $assunto === '') {
+    $_SESSION['flash_error'] = 'Dados inválidos.';
     header('Location: ../index.php');
     exit;
 }
 
 $conn = db();
-$totalDest = 0;
-if (is_array($destUsuarios)) {
-    foreach ($destUsuarios as $usuarioId) {
-        if ((int)$usuarioId > 0) {
-            $totalDest++;
-        }
-    }
-}
-if (is_array($destUnidades)) {
-    foreach ($destUnidades as $unidadeId) {
-        if ((int)$unidadeId > 0) {
-            $totalDest++;
-        }
-    }
-}
-if (is_array($destExternos)) {
-    foreach ($destExternos as $externo) {
-        if (!is_array($externo)) {
-            continue;
-        }
-        $nome = trim((string)($externo['nome'] ?? ''));
-        $email = trim((string)($externo['email'] ?? ''));
-        if ($nome !== '' || $email !== '') {
-            $totalDest++;
-        }
-    }
-}
-
-$stmt = $conn->prepare('SELECT id, nome FROM doc_tipos WHERE id = ?');
-$stmt->bind_param('i', $tipoId);
-$stmt->execute();
-$tipoAtual = $stmt->get_result()->fetch_assoc();
-$stmt->close();
-
-if ($tipoAtual && strtolower((string)$tipoAtual['nome']) === 'memorando' && $totalDest > 1) {
-    $stmt = $conn->prepare('SELECT id FROM doc_tipos WHERE nome = ? LIMIT 1');
-    $tipoNome = 'Memorando Circular';
-    $stmt->bind_param('s', $tipoNome);
-    $stmt->execute();
-    $tipoCircular = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-    if ($tipoCircular) {
-        $tipoId = (int)$tipoCircular['id'];
-    }
-}
 $conn->begin_transaction();
 try {
-    $statusId = 1; // rascunho
-    $stmt = $conn->prepare('INSERT INTO doc_documentos (tipo_id, id_unidade_origem, criado_por, status_id, assunto, confidencial, nivel_sigilo) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    $stmt->bind_param('iiiisis', $tipoId, $unidadeOrigem, $matricula, $statusId, $assunto, $confidencial, $nivelSigilo);
+    $stmt = $conn->prepare('SELECT id, criado_por FROM doc_documentos WHERE id = ?');
+    $stmt->bind_param('i', $documentoId);
     $stmt->execute();
-    $documentoId = $stmt->insert_id;
+    $doc = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 
-    if ($conteudo !== '') {
-        $stmt = $conn->prepare('INSERT INTO doc_versoes (documento_id, numero_versao, conteudo, criado_por) VALUES (?, ?, ?, ?)');
-        $versao = 1;
-        $stmt->bind_param('iisi', $documentoId, $versao, $conteudo, $matricula);
-        $stmt->execute();
-        $stmt->close();
+    if (!$doc || (int)$doc['criado_por'] !== $matricula) {
+        throw new RuntimeException('Sem permissão para editar este documento.');
     }
+
+    $stmt = $conn->prepare('UPDATE doc_documentos SET assunto = ?, confidencial = ? WHERE id = ?');
+    $stmt->bind_param('sii', $assunto, $confidencial, $documentoId);
+    $stmt->execute();
+    $stmt->close();
+
+    $stmt = $conn->prepare('DELETE FROM doc_destinatarios WHERE documento_id = ?');
+    $stmt->bind_param('i', $documentoId);
+    $stmt->execute();
+    $stmt->close();
 
     if (is_array($destUsuarios)) {
         $stmt = $conn->prepare('INSERT INTO doc_destinatarios (documento_id, tipo_destino, ordem, usuario_destino, pronome_tratamento) VALUES (?, ?, ?, ?, ?)');
@@ -109,20 +60,6 @@ try {
                 $tipo = 'interno';
                 $pronome = trim((string)($destUsuariosPronome[$usuarioId] ?? ''));
                 $stmt->bind_param('isiis', $documentoId, $tipo, $ordem, $usuarioId, $pronome);
-                $stmt->execute();
-                $ordem++;
-            }
-        }
-        $stmt->close();
-    }
-
-    if (is_array($signUsuarios)) {
-        $stmt = $conn->prepare('INSERT INTO doc_assinaturas (documento_id, usuario, ordem) VALUES (?, ?, ?)');
-        $ordem = 1;
-        foreach ($signUsuarios as $usuarioId) {
-            $usuarioId = (int)$usuarioId;
-            if ($usuarioId > 0) {
-                $stmt->bind_param('iii', $documentoId, $usuarioId, $ordem);
                 $stmt->execute();
                 $ordem++;
             }
@@ -169,13 +106,69 @@ try {
         $stmt->close();
     }
 
+    $stmt = $conn->prepare('DELETE FROM doc_assinaturas WHERE documento_id = ?');
+    $stmt->bind_param('i', $documentoId);
+    $stmt->execute();
+    $stmt->close();
+
+    if (is_array($signUsuarios)) {
+        $stmt = $conn->prepare('INSERT INTO doc_assinaturas (documento_id, usuario, ordem) VALUES (?, ?, ?)');
+        $ordem = 1;
+        foreach ($signUsuarios as $usuarioId) {
+            $usuarioId = (int)$usuarioId;
+            if ($usuarioId > 0) {
+                $stmt->bind_param('iii', $documentoId, $usuarioId, $ordem);
+                $stmt->execute();
+                $ordem++;
+            }
+        }
+        $stmt->close();
+    }
+
+    $stmt = $conn->prepare('SELECT COALESCE(MAX(numero_versao), 0) AS max_ver FROM doc_versoes WHERE documento_id = ?');
+    $stmt->bind_param('i', $documentoId);
+    $stmt->execute();
+    $maxVer = (int)($stmt->get_result()->fetch_assoc()['max_ver'] ?? 0);
+    $stmt->close();
+    $novaVersao = $maxVer + 1;
+
+    $stmt = $conn->prepare('INSERT INTO doc_versoes (documento_id, numero_versao, conteudo, criado_por) VALUES (?, ?, ?, ?)');
+    $stmt->bind_param('iisi', $documentoId, $novaVersao, $conteudo, $matricula);
+    $stmt->execute();
+    $stmt->close();
+
+    $stmt = $conn->prepare('SELECT COUNT(*) AS total FROM doc_assinaturas WHERE documento_id = ?');
+    $stmt->bind_param('i', $documentoId);
+    $stmt->execute();
+    $assinaturasTotal = (int)($stmt->get_result()->fetch_assoc()['total'] ?? 0);
+    $stmt->close();
+
+    if ($assinaturasTotal > 0) {
+        $stmt = $conn->prepare('UPDATE doc_assinaturas SET status = "pendente", assinado_em = NULL, assinatura_hash = NULL, observacao = NULL WHERE documento_id = ?');
+        $stmt->bind_param('i', $documentoId);
+        $stmt->execute();
+        $stmt->close();
+
+        $statusAssinatura = 3;
+        $stmt = $conn->prepare('UPDATE doc_documentos SET status_id = ? WHERE id = ?');
+        $stmt->bind_param('ii', $statusAssinatura, $documentoId);
+        $stmt->execute();
+        $stmt->close();
+    }
+
+    $detalhes = json_encode(['assunto' => $assunto, 'versao' => $novaVersao], JSON_UNESCAPED_UNICODE);
+    $stmt = $conn->prepare('INSERT INTO doc_auditoria (entidade, entidade_id, usuario, evento, detalhes) VALUES ("documento", ?, ?, "edicao", ?)');
+    $stmt->bind_param('iis', $documentoId, $matricula, $detalhes);
+    $stmt->execute();
+    $stmt->close();
+
     $conn->commit();
-    $_SESSION['flash_success'] = 'Documento criado em rascunho.';
+    $_SESSION['flash_success'] = 'Documento atualizado e reenviado para assinatura.';
     header('Location: ../index.php?doc=' . $documentoId);
     exit;
 } catch (Throwable $e) {
     $conn->rollback();
-    $_SESSION['flash_error'] = 'Erro ao criar documento: ' . $e->getMessage();
-    header('Location: ../index.php');
+    $_SESSION['flash_error'] = 'Erro ao editar documento: ' . $e->getMessage();
+    header('Location: ../index.php?doc=' . $documentoId);
     exit;
 }

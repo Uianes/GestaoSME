@@ -62,7 +62,7 @@ try {
     $idUnidade = (int)$doc['id_unidade_origem'];
     $ano = (int)date('Y');
 
-    $stmt = $conn->prepare('SELECT usa_numero, prefixo FROM doc_tipos WHERE id = ?');
+    $stmt = $conn->prepare('SELECT nome, usa_numero, prefixo FROM doc_tipos WHERE id = ?');
     $stmt->bind_param('i', $tipoId);
     $stmt->execute();
     $tipo = $stmt->get_result()->fetch_assoc();
@@ -76,11 +76,18 @@ try {
         $stmt->close();
 
         if (!$seq) {
-            $stmt = $conn->prepare('INSERT INTO doc_sequencias (tipo_id, id_unidade, ano, proximo_numero) VALUES (?, ?, ?, 1)');
-            $stmt->bind_param('iii', $tipoId, $idUnidade, $ano);
+            $inicio = 1;
+            $tipoNome = strtolower((string)($tipo['nome'] ?? ''));
+            if (strpos($tipoNome, 'memorando') !== false) {
+                $inicio = 48;
+            } elseif (strpos($tipoNome, 'ofício') !== false || strpos($tipoNome, 'oficio') !== false) {
+                $inicio = 2;
+            }
+            $stmt = $conn->prepare('INSERT INTO doc_sequencias (tipo_id, id_unidade, ano, proximo_numero) VALUES (?, ?, ?, ?)');
+            $stmt->bind_param('iiii', $tipoId, $idUnidade, $ano, $inicio);
             $stmt->execute();
             $seqId = $stmt->insert_id;
-            $numero = 1;
+            $numero = $inicio;
             $stmt->close();
         } else {
             $seqId = (int)$seq['id'];
