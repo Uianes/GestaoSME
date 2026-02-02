@@ -11,6 +11,9 @@ config/smtp.php
 # Uploads
 uploads/
 
+# Downloads
+downloads/
+
 # Composer
 vendor/
 

@@ -8,6 +8,7 @@ return [
   'atestados' => ['label' => 'Atestados', 'icon' => 'bi-file-earmark-post', 'href' => url('app.php?page=atestados')],
   'ouvidoria' => ['label' => 'Ouvidoria', 'icon' => 'bi-bookmark-plus', 'href' => url('app.php?page=ouvidoria')],
   'dashboards' => ['label' => 'Dashboards', 'icon' => 'bi-bar-chart', 'href' => url('app.php?page=dashboards')],
+  'avaliacoesExternas' => ['label' => 'Avaliações externas', 'icon' => 'bi-graph-up', 'href' => url('app.php?page=avaliacoesExternas')],
   'turmas' => ['label' => 'Minhas turmas', 'icon' => 'bi-mortarboard', 'href' => url('app.php?page=turmas')],
   'projetos' => ['label' => 'Meus projetos', 'icon' => 'bi-award', 'href' => url('app.php?page=projetos')],
   'biblioteca' => ['label' => 'Biblioteca', 'icon' => 'bi-book', 'href' => url('app.php?page=biblioteca')],
