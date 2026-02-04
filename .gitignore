@@ -23,3 +23,11 @@ vendor/
 # Cache/temp
 *.tmp
 *.swp
+
+# Documents / scripts
+*.pdf
+*.py
+*.md
+*.csv
+*.xlsx
+!README.md
