@@ -47,10 +47,10 @@ $showPedagogico = sa_has_visible_links(['turmas', 'pareceres', 'frequencia', 'ae
 ?>
 <div class="p-3">
   <div class="input-group sa-search">
-      <span class="input-group-text bg-body border-end-0">
+    <span class="input-group-text">
       <i class="bi bi-search"></i>
     </span>
-    <input type="text" class="form-control border-start-0" placeholder="Pesquisar...">
+    <input type="text" class="form-control" placeholder="Pesquisar..." data-sa-search>
   </div>
 </div>
 <div class="sa-sidebar-scroll px-2 pb-3">
@@ -318,3 +318,68 @@ $sidebarInner = ob_get_clean();
     </div>
   </div>
 </div>
+<script>
+  (function () {
+    const sidebars = document.querySelectorAll('.sa-sidebar');
+    sidebars.forEach((sidebar) => {
+      const input = sidebar.querySelector('[data-sa-search]');
+      if (!input) return;
+
+      const reset = () => {
+        sidebar.querySelectorAll('.sa-tree .sa-item').forEach((li) => {
+          li.style.display = '';
+        });
+        sidebar.querySelectorAll('.sa-sub').forEach((ul) => {
+          ul.style.display = '';
+        });
+      };
+
+      const apply = () => {
+        const query = (input.value || '').trim().toLowerCase();
+        if (!query) {
+          reset();
+          return;
+        }
+
+        // First pass: leaf links
+        sidebar.querySelectorAll('.sa-tree .sa-item').forEach((li) => {
+          const link = li.querySelector('a.sa-link');
+          const btn = li.querySelector('button.sa-link-btn');
+          if (link) {
+            const text = (link.textContent || '').toLowerCase();
+            li.style.display = text.includes(query) ? '' : 'none';
+          }
+          if (btn) {
+            li.style.display = '';
+          }
+        });
+
+        // Second pass: groups
+        sidebar.querySelectorAll('.sa-sub').forEach((ul) => {
+          let anyChild = false;
+          ul.querySelectorAll('li.sa-item').forEach((li) => {
+            const link = li.querySelector('a.sa-link');
+            const text = (link?.textContent || '').toLowerCase();
+            const show = text.includes(query);
+            li.style.display = show ? '' : 'none';
+            if (show) anyChild = true;
+          });
+
+          const parentItem = ul.closest('li.sa-item');
+          const parentBtn = parentItem?.querySelector('button.sa-link-btn');
+          const parentText = (parentBtn?.textContent || '').toLowerCase();
+          const showParent = anyChild || parentText.includes(query);
+          if (parentItem) parentItem.style.display = showParent ? '' : 'none';
+
+          if (parentText.includes(query)) {
+            ul.querySelectorAll('li.sa-item').forEach((li) => {
+              li.style.display = '';
+            });
+          }
+        });
+      };
+
+      input.addEventListener('input', apply);
+    });
+  })();
+</script>

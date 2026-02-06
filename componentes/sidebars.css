@@ -12,8 +12,29 @@
   overflow-y: auto;
 }
 
+.sa-search .input-group-text,
+.sa-search .form-control {
+  border-color: var(--bs-border-color);
+  background: var(--bs-body-bg);
+}
+
+.sa-search .input-group-text {
+  border-right: 0;
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+  padding: .65rem .75rem;
+}
+
+.sa-search .form-control {
+  border-left: 0;
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+  padding: .65rem .75rem;
+}
+
 .sa-search .form-control:focus {
   box-shadow: none;
+  border-color: var(--bs-primary);
 }
 
 .sa-section-title {
