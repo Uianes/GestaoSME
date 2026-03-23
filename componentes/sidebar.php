@@ -41,7 +41,7 @@ $showProtocolo = sa_has_visible_links(['protocolo', 'assinatura', 'certificados'
 $showComunicados = sa_has_visible_links(['documentos', 'calendario', 'comunicadosPDDE'], $links);
 $showOuvidoria = sa_has_visible_links(['ouvidoria', 'infraestrutura', 'suporte', 'votacoes'], $links);
 $showDashboard = sa_has_visible_links(['dashboards', 'avaliacoesExternas'], $links);
-$showGestao = sa_has_visible_links(['projetos', 'PPA', 'planosGestao', 'justificativas', 'atestadosSaude', 'progressao', 'patrimonio', 'transporte'], $links);
+$showGestao = sa_has_visible_links(['projetos', 'ppa', 'planejamento', 'planosGestao', 'justificativas', 'atestadosSaude', 'progressao', 'patrimonio', 'transporte'], $links);
 $showBiblioteca = sa_has_visible_links(['biblioteca', 'mooc'], $links);
 $showPedagogico = sa_has_visible_links(['turmas', 'pareceres', 'frequencia', 'aee', 'alunos_inclusao', 'pme', 'horarios'], $links);
 ?>
@@ -171,7 +171,10 @@ $showPedagogico = sa_has_visible_links(['turmas', 'pareceres', 'frequencia', 'ae
             <?php if (isset($links['projetos']) && ($link = sa_sidebar_link_or_null('projetos', $links['projetos'], $activePage))): ?>
               <li class="sa-item"><?= $link ?></li>
             <?php endif; ?>
-            <?php if (isset($links['PPA']) && ($link = sa_sidebar_link_or_null('PPA', $links['PPA'], $activePage))): ?>
+            <?php if (isset($links['ppa']) && ($link = sa_sidebar_link_or_null('ppa', $links['ppa'], $activePage))): ?>
+              <li class="sa-item"><?= $link ?></li>
+            <?php endif; ?>
+            <?php if (isset($links['planejamento']) && ($link = sa_sidebar_link_or_null('planejamento', $links['planejamento'], $activePage))): ?>
               <li class="sa-item"><?= $link ?></li>
             <?php endif; ?>
             <?php if (isset($links['planosGestao']) && ($link = sa_sidebar_link_or_null('planosGestao', $links['planosGestao'], $activePage))): ?>

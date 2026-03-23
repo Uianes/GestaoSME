@@ -19,6 +19,7 @@ return [
   'infraestrutura' => ['label' => 'Avaliação de Infraestrutura', 'icon' => 'bi-building-check', 'href' => url('app.php?page=infraestrutura')],
   'pme' => ['label' => 'Plano Municipal de Educação', 'icon' => 'bi-card-list', 'href' => url('app.php?page=pme')],
   'ppa' => ['label' => 'Plano Plurianual', 'icon' => 'bi-cash-coin', 'href' => url('app.php?page=ppa')],
+  'planejamento' => ['label' => 'Planejamento PPA', 'icon' => 'bi-kanban', 'href' => url('app.php?page=planejamento')],
   'planosGestao' => ['label' => 'Planos de Gestão', 'icon' => 'bi-postcard', 'href' => url('app.php?page=planosGestao')],
   'calendario' => ['label' => 'Calendário', 'icon' => 'bi-calendar', 'href' => url('app.php?page=calendario')],
   'justificativas' => ['label' => 'Justificativas do Ponto', 'icon' => 'bi-calendar-plus', 'href' => url('app.php?page=justificativas')],

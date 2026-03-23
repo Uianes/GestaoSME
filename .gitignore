@@ -34,4 +34,5 @@ vendor/
 *.csv
 *.pyc
 *.xlsx
+*.zip
 !README.md
