@@ -7,7 +7,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 function is_logged_in(): bool {
     return !empty($_SESSION['user']);
 }
-function require_login(): void {
+function require_login() {
     if (!is_logged_in()) {
         header('Location: app.php?page=login');
         exit;

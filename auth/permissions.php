@@ -19,7 +19,7 @@ function system_links(): array
     return require __DIR__ . '/../config/links.php';
 }
 
-function user_allowed_systems(int $matricula, ?mysqli $conn = null): array
+function user_allowed_systems(int $matricula, $conn = null): array
 {
     if ($matricula <= 0) {
         return [];
@@ -29,12 +29,16 @@ function user_allowed_systems(int $matricula, ?mysqli $conn = null): array
         return [];
     }
     $stmt = $db->prepare('SELECT sistema FROM usuarios_sistemas WHERE matricula = ?');
+    if (!$stmt) {
+        return [];
+    }
     $stmt->bind_param('i', $matricula);
     $stmt->execute();
-    $res = $stmt->get_result();
     $systems = [];
-    while ($row = $res->fetch_assoc()) {
-        $systems[] = (string)$row['sistema'];
+    $sistema = '';
+    $stmt->bind_result($sistema);
+    while ($stmt->fetch()) {
+        $systems[] = (string)$sistema;
     }
     $stmt->close();
     return $systems;
