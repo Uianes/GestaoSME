@@ -6,6 +6,7 @@
 .sa-sidebar {
   width: 280px;
   min-height: 100vh;
+  transition: width .2s ease, min-width .2s ease, opacity .2s ease;
 }
 
 .sa-sidebar-scroll {
@@ -89,4 +90,15 @@
 
 .sa-link-btn[aria-expanded="false"] .sa-caret {
   transform: rotate(-90deg);
+}
+
+@media (min-width: 992px) {
+  body.sa-sidebar-collapsed .sa-sidebar-desktop {
+    width: 0;
+    min-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    border-right: 0 !important;
+    pointer-events: none;
+  }
 }

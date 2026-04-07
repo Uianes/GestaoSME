@@ -9,6 +9,16 @@ $user = $_SESSION['user'] ?? null;
     <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#saSidebar" aria-controls="saSidebar">
       <i class="bi bi-list"></i>
     </button>
+    <button
+      class="btn btn-sm btn-outline-secondary d-none d-lg-inline-flex align-items-center justify-content-center"
+      type="button"
+      data-sa-sidebar-toggle
+      aria-label="Alternar menu lateral"
+      aria-expanded="true"
+      title="Ocultar ou mostrar menu lateral"
+    >
+      <i class="bi bi-list"></i>
+    </button>
     <a class="navbar-brand fw-semibold" href="#">
       <img src="img/logosmefundo.svg" alt="Logo SME" width="30" height="24" class="d-inline-block align-text-top">
      SME Santo Augusto

@@ -1,5 +1,16 @@
 <?php
-require_once __DIR__ . '/auth_guard.php';
+$bootError = null;
+$conn = null;
+$unidades = [];
+$unidades_error = null;
+$userIsSme = false;
+$userUnidades = [];
+
+try {
+  require_once __DIR__ . '/auth_guard.php';
+} catch (Throwable $e) {
+  $bootError = $e->getMessage();
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reload'])) {
   header("Location: index.php");
@@ -21,26 +32,39 @@ if (isset($_SESSION['message'])) {
   unset($_SESSION['message_type']);
 }
 
-require_once 'db_connection.php';
-$conn = open_connection();
-$unidades = [];
-$unidades_error = null;
-[$userIsSme, $userUnidades] = pat_user_context($conn);
-$unidades_result = mysqli_query($conn, "SELECT id_unidade, nome FROM unidade ORDER BY nome");
-if ($unidades_result) {
-  while ($row_unidade = mysqli_fetch_assoc($unidades_result)) {
-    $unidades[] = [
-      'id' => (int)$row_unidade['id_unidade'],
-      'nome' => $row_unidade['nome'],
-    ];
+if ($bootError === null) {
+  try {
+    require_once 'db_connection.php';
+    $conn = open_connection();
+    [$userIsSme, $userUnidades] = pat_user_context($conn);
+
+    if (function_exists('pat_table_exists') && function_exists('pat_column_exists')
+      && pat_table_exists($conn, 'unidade')
+      && pat_column_exists($conn, 'unidade', 'id_unidade')
+      && pat_column_exists($conn, 'unidade', 'nome')) {
+      $unidades_result = mysqli_query($conn, "SELECT id_unidade, nome FROM unidade ORDER BY nome");
+      if ($unidades_result) {
+        while ($row_unidade = mysqli_fetch_assoc($unidades_result)) {
+          $unidades[] = [
+            'id' => (int)$row_unidade['id_unidade'],
+            'nome' => $row_unidade['nome'],
+          ];
+        }
+      } else {
+        $unidades_error = mysqli_error($conn);
+      }
+    } else {
+      $unidades_error = 'Tabela unidade não encontrada ou schema incompatível.';
+    }
+
+    if (!$userIsSme && !empty($userUnidades)) {
+      $unidades = array_values(array_filter($unidades, function ($unidade) use ($userUnidades) {
+        return in_array((int)$unidade['id'], $userUnidades, true);
+      }));
+    }
+  } catch (Throwable $e) {
+    $bootError = $e->getMessage();
   }
-} else {
-  $unidades_error = mysqli_error($conn);
-}
-if (!$userIsSme && !empty($userUnidades)) {
-  $unidades = array_values(array_filter($unidades, function ($unidade) use ($userUnidades) {
-    return in_array((int)$unidade['id'], $userUnidades, true);
-  }));
 }
 ?>
 <!doctype html>
@@ -58,6 +82,17 @@ if (!$userIsSme && !empty($userUnidades)) {
 
 <body>
   <?php echo $toastHtml; ?>
+  <?php if ($bootError !== null): ?>
+    <div class="container py-4">
+      <div class="alert alert-danger mb-0">
+        Falha ao carregar o módulo de patrimônio.
+        <br>
+        <small><?= htmlspecialchars($bootError) ?></small>
+      </div>
+    </div>
+  </body>
+</html>
+<?php return; endif; ?>
   <nav class="navbar bg-body-secondary border-bottom sticky-top">
     <div class="container-fluid d-flex">
       <a class="navbar-brand" href="#">
