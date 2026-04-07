@@ -89,6 +89,10 @@ if ($permissionsTableReady && !empty($users)) {
 <h2 class="mb-2 text-body-emphasis">Modo Administrador</h2>
 <p class="text-muted mb-4">Gerencie o acesso dos usuários aos sistemas.</p>
 
+<div class="d-flex justify-content-end mb-3">
+  <a class="btn btn-outline-primary" href="<?= url('app.php?page=doc_grupos') ?>">Grupos de destinatários</a>
+</div>
+
 <?php if ($flashSuccess): ?>
   <div class="alert alert-success" role="alert"><?= htmlspecialchars($flashSuccess, ENT_QUOTES, 'UTF-8') ?></div>
 <?php endif; ?>

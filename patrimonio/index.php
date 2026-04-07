@@ -5,6 +5,7 @@ $unidades = [];
 $unidades_error = null;
 $userIsSme = false;
 $userUnidades = [];
+$schemaAdditionsAlert = null;
 
 try {
   require_once __DIR__ . '/auth_guard.php';
@@ -37,6 +38,56 @@ if ($bootError === null) {
     require_once 'db_connection.php';
     $conn = open_connection();
     [$userIsSme, $userUnidades] = pat_user_context($conn);
+
+    $patrimonioExtraColumns = [
+      'numero_provisorio',
+      'marca',
+      'modelo',
+      'numero_serie',
+      'cor',
+      'ano_aquisicao',
+      'nfe_numero',
+      'fornecedor_nome',
+      'fornecedor_cnpj',
+      'valor_unitario',
+      'valor_total_nota',
+      'nota_fiscal_anexo',
+      'em_uso',
+      'estado_conservacao',
+      'origem_aquisicao',
+      'cadastrado_por',
+      'cadastrado_em',
+      'unidade_vinculada_cadastro'
+    ];
+    $missingPatrimonioColumns = [];
+    if (function_exists('pat_table_exists') && function_exists('pat_column_exists') && pat_table_exists($conn, 'patrimonio')) {
+      foreach ($patrimonioExtraColumns as $column) {
+        if (!pat_column_exists($conn, 'patrimonio', $column)) {
+          $missingPatrimonioColumns[] = $column;
+        }
+      }
+    }
+    if (!empty($missingPatrimonioColumns)) {
+      $schemaAdditionsAlert = "ALTER TABLE patrimonio\n"
+        . "  ADD COLUMN numero_provisorio TINYINT(1) NOT NULL DEFAULT 0,\n"
+        . "  ADD COLUMN marca VARCHAR(120) NULL,\n"
+        . "  ADD COLUMN modelo VARCHAR(120) NULL,\n"
+        . "  ADD COLUMN numero_serie VARCHAR(120) NULL,\n"
+        . "  ADD COLUMN cor VARCHAR(80) NULL,\n"
+        . "  ADD COLUMN ano_aquisicao SMALLINT NULL,\n"
+        . "  ADD COLUMN nfe_numero VARCHAR(60) NULL,\n"
+        . "  ADD COLUMN fornecedor_nome VARCHAR(180) NULL,\n"
+        . "  ADD COLUMN fornecedor_cnpj VARCHAR(18) NULL,\n"
+        . "  ADD COLUMN valor_unitario DECIMAL(12,2) NULL,\n"
+        . "  ADD COLUMN valor_total_nota DECIMAL(12,2) NULL,\n"
+        . "  ADD COLUMN nota_fiscal_anexo VARCHAR(600) NULL,\n"
+        . "  ADD COLUMN em_uso TINYINT(1) NULL,\n"
+        . "  ADD COLUMN estado_conservacao VARCHAR(20) NULL,\n"
+        . "  ADD COLUMN origem_aquisicao VARCHAR(40) NULL,\n"
+        . "  ADD COLUMN cadastrado_por INT NULL,\n"
+        . "  ADD COLUMN cadastrado_em DATETIME NULL,\n"
+        . "  ADD COLUMN unidade_vinculada_cadastro INT NULL;";
+    }
 
     if (function_exists('pat_table_exists') && function_exists('pat_column_exists')
       && pat_table_exists($conn, 'unidade')
@@ -104,6 +155,9 @@ if ($bootError === null) {
       <button class="btn btn-primary ms-3" type="button" data-bs-toggle="modal" data-bs-target="#ModalGerarPDF">
         Gerar PDF
       </button>
+      <a class="btn btn-success ms-3" href="./export_xlsx.php" title="Baixar planilha XLSX com todos os patrimônios">
+        Exportar XLSX
+      </a>
       <!-- Formulário unificado de busca -->
       <form class="d-flex ms-auto" method="GET">
         <div class="input-group mx-1">
@@ -129,6 +183,12 @@ if ($bootError === null) {
   </nav>
 
   <div class="container-fluid">
+    <?php if ($schemaAdditionsAlert !== null): ?>
+      <div class="alert alert-info mt-3 mb-0">
+        Para habilitar todos os novos campos do patrimônio, atualize a tabela com:
+        <pre class="mb-0 mt-2 small"><code><?= htmlspecialchars($schemaAdditionsAlert, ENT_QUOTES, 'UTF-8') ?></code></pre>
+      </div>
+    <?php endif; ?>
 
     <!-- tabela -->
     <div class="row justify-content-center">
@@ -143,7 +203,7 @@ if ($bootError === null) {
               <th scope='col'>Descrição Localização</th>
               <th scope='col'>Status</th>
               <th scope='col'>Memorando</th>
-              <th scope='col'>Editar</th>
+              <th scope='col'>Ações</th>
             </tr>
           </thead>
           <tbody class='table-group-divider'>
@@ -196,8 +256,13 @@ if ($bootError === null) {
                   $dataEntrada = date('d/m/Y', strtotime($row['Data_Entrada']));
                   $descricaoSemEnter = str_replace(["\r", "\n"], ' ', $row['Descricao']);
                   $descricaoLocalSemEnter = str_replace(["\r", "\n"], ' ', $row['Descricao_Localizacao']);
+                  $isNumeroProvisorio = ((int)($row['numero_provisorio'] ?? 0) === 1)
+                    || strpos((string)$row['N_Patrimonio'], 'PROV-') === 0;
                   echo "<tr>";
-                  echo "<td>" . $row['N_Patrimonio'] . "</td>";
+                  echo "<td>"
+                    . htmlspecialchars((string)$row['N_Patrimonio'], ENT_QUOTES, 'UTF-8')
+                    . ($isNumeroProvisorio ? " <span class='badge text-bg-warning'>Provisório</span>" : "")
+                    . "</td>";
                   echo "<td>" . $row['Descricao'] . "</td>";
                   echo "<td>" . $dataEntrada . "</td>";
                   $localizacaoNome = $row['unidade_nome'] ?? $row['Localizacao'];
@@ -208,16 +273,62 @@ if ($bootError === null) {
 
                   if ($row['Status'] === 'Tombado') {
                     echo "<td class='text-center'>
+                                    <button class='btn btn-secondary btn-sm' title='Visualizar'
+                                      type='button'
+                                      data-numero-original='" . htmlspecialchars((string)$row['N_Patrimonio'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-numero-patrimonio='" . htmlspecialchars((string)$row['N_Patrimonio'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-numero-provisorio='" . (((int)($row['numero_provisorio'] ?? 0) === 1 || strpos((string)$row['N_Patrimonio'], 'PROV-') === 0) ? "1" : "0") . "'
+                                      data-descricao='" . htmlspecialchars((string)$row['Descricao'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-data-entrada='" . htmlspecialchars((string)$row['Data_Entrada'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-localizacao='" . htmlspecialchars((string)$row['Localizacao'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-unidade-nome='" . htmlspecialchars((string)$localizacaoNome, ENT_QUOTES, 'UTF-8') . "'
+                                      data-desc-localizacao='" . htmlspecialchars((string)$row['Descricao_Localizacao'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-status='" . htmlspecialchars((string)$row['Status'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-memorando='" . htmlspecialchars((string)$row['Memorando'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-marca='" . htmlspecialchars((string)($row['marca'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-modelo='" . htmlspecialchars((string)($row['modelo'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-numero-serie='" . htmlspecialchars((string)($row['numero_serie'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-cor='" . htmlspecialchars((string)($row['cor'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-ano-aquisicao='" . htmlspecialchars((string)($row['ano_aquisicao'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-nfe-numero='" . htmlspecialchars((string)($row['nfe_numero'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-fornecedor-nome='" . htmlspecialchars((string)($row['fornecedor_nome'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-fornecedor-cnpj='" . htmlspecialchars((string)($row['fornecedor_cnpj'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-valor-unitario='" . htmlspecialchars((string)($row['valor_unitario'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-valor-total-nota='" . htmlspecialchars((string)($row['valor_total_nota'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-em-uso='" . htmlspecialchars((string)($row['em_uso'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-estado-conservacao='" . htmlspecialchars((string)($row['estado_conservacao'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-origem-aquisicao='" . htmlspecialchars((string)($row['origem_aquisicao'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-nota-fiscal-anexo='" . htmlspecialchars((string)($row['nota_fiscal_anexo'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      onclick='abrirModalVisualizar(this)'>
+                                      <i class='bi bi-eye-fill'></i>
+                                    </button>
                                     <button class='btn btn-primary btn-sm' title='Editar'
-                                      onclick=\"abrirModalEditar(
-                                        '{$row['N_Patrimonio']}',
-                                        '$descricaoSemEnter',
-                                        '{$row['Data_Entrada']}',
-                                        '{$row['Localizacao']}',
-                                        '$descricaoLocalSemEnter',
-                                        '{$row['Status']}',
-                                        '{$row['Memorando']}'
-                                      )\">
+                                      type='button'
+                                      data-numero-original='" . htmlspecialchars((string)$row['N_Patrimonio'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-numero-patrimonio='" . htmlspecialchars((string)$row['N_Patrimonio'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-numero-provisorio='" . (((int)($row['numero_provisorio'] ?? 0) === 1 || strpos((string)$row['N_Patrimonio'], 'PROV-') === 0) ? "1" : "0") . "'
+                                      data-descricao='" . htmlspecialchars((string)$row['Descricao'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-data-entrada='" . htmlspecialchars((string)$row['Data_Entrada'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-localizacao='" . htmlspecialchars((string)$row['Localizacao'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-unidade-nome='" . htmlspecialchars((string)$localizacaoNome, ENT_QUOTES, 'UTF-8') . "'
+                                      data-desc-localizacao='" . htmlspecialchars((string)$row['Descricao_Localizacao'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-status='" . htmlspecialchars((string)$row['Status'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-memorando='" . htmlspecialchars((string)$row['Memorando'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-marca='" . htmlspecialchars((string)($row['marca'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-modelo='" . htmlspecialchars((string)($row['modelo'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-numero-serie='" . htmlspecialchars((string)($row['numero_serie'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-cor='" . htmlspecialchars((string)($row['cor'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-ano-aquisicao='" . htmlspecialchars((string)($row['ano_aquisicao'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-nfe-numero='" . htmlspecialchars((string)($row['nfe_numero'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-fornecedor-nome='" . htmlspecialchars((string)($row['fornecedor_nome'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-fornecedor-cnpj='" . htmlspecialchars((string)($row['fornecedor_cnpj'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-valor-unitario='" . htmlspecialchars((string)($row['valor_unitario'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-valor-total-nota='" . htmlspecialchars((string)($row['valor_total_nota'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-em-uso='" . htmlspecialchars((string)($row['em_uso'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-estado-conservacao='" . htmlspecialchars((string)($row['estado_conservacao'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-origem-aquisicao='" . htmlspecialchars((string)($row['origem_aquisicao'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-nota-fiscal-anexo='" . htmlspecialchars((string)($row['nota_fiscal_anexo'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      onclick='abrirModalEditar(this)'>
                                       <i class='bi bi-pencil-fill'></i>
                                     </button>
                                     <button class='btn btn-danger btn-sm' title='Excluir'
@@ -246,16 +357,62 @@ if ($bootError === null) {
                                   </td>";
                   } else {
                     echo "<td class='text-center'>
+                                    <button class='btn btn-secondary btn-sm' title='Visualizar'
+                                      type='button'
+                                      data-numero-original='" . htmlspecialchars((string)$row['N_Patrimonio'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-numero-patrimonio='" . htmlspecialchars((string)$row['N_Patrimonio'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-numero-provisorio='" . (((int)($row['numero_provisorio'] ?? 0) === 1 || strpos((string)$row['N_Patrimonio'], 'PROV-') === 0) ? "1" : "0") . "'
+                                      data-descricao='" . htmlspecialchars((string)$row['Descricao'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-data-entrada='" . htmlspecialchars((string)$row['Data_Entrada'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-localizacao='" . htmlspecialchars((string)$row['Localizacao'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-unidade-nome='" . htmlspecialchars((string)$localizacaoNome, ENT_QUOTES, 'UTF-8') . "'
+                                      data-desc-localizacao='" . htmlspecialchars((string)$row['Descricao_Localizacao'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-status='" . htmlspecialchars((string)$row['Status'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-memorando='" . htmlspecialchars((string)$row['Memorando'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-marca='" . htmlspecialchars((string)($row['marca'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-modelo='" . htmlspecialchars((string)($row['modelo'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-numero-serie='" . htmlspecialchars((string)($row['numero_serie'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-cor='" . htmlspecialchars((string)($row['cor'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-ano-aquisicao='" . htmlspecialchars((string)($row['ano_aquisicao'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-nfe-numero='" . htmlspecialchars((string)($row['nfe_numero'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-fornecedor-nome='" . htmlspecialchars((string)($row['fornecedor_nome'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-fornecedor-cnpj='" . htmlspecialchars((string)($row['fornecedor_cnpj'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-valor-unitario='" . htmlspecialchars((string)($row['valor_unitario'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-valor-total-nota='" . htmlspecialchars((string)($row['valor_total_nota'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-em-uso='" . htmlspecialchars((string)($row['em_uso'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-estado-conservacao='" . htmlspecialchars((string)($row['estado_conservacao'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-origem-aquisicao='" . htmlspecialchars((string)($row['origem_aquisicao'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-nota-fiscal-anexo='" . htmlspecialchars((string)($row['nota_fiscal_anexo'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      onclick='abrirModalVisualizar(this)'>
+                                      <i class='bi bi-eye-fill'></i>
+                                    </button>
                                     <button class='btn btn-primary btn-sm' title='Editar'
-                                      onclick=\"abrirModalEditar(
-                                        '{$row['N_Patrimonio']}',
-                                        '$descricaoSemEnter',
-                                        '{$row['Data_Entrada']}',
-                                        '{$row['Localizacao']}',
-                                        '$descricaoLocalSemEnter',
-                                        '{$row['Status']}',
-                                        '{$row['Memorando']}'
-                                      )\">
+                                      type='button'
+                                      data-numero-original='" . htmlspecialchars((string)$row['N_Patrimonio'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-numero-patrimonio='" . htmlspecialchars((string)$row['N_Patrimonio'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-numero-provisorio='" . (((int)($row['numero_provisorio'] ?? 0) === 1 || strpos((string)$row['N_Patrimonio'], 'PROV-') === 0) ? "1" : "0") . "'
+                                      data-descricao='" . htmlspecialchars((string)$row['Descricao'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-data-entrada='" . htmlspecialchars((string)$row['Data_Entrada'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-localizacao='" . htmlspecialchars((string)$row['Localizacao'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-unidade-nome='" . htmlspecialchars((string)$localizacaoNome, ENT_QUOTES, 'UTF-8') . "'
+                                      data-desc-localizacao='" . htmlspecialchars((string)$row['Descricao_Localizacao'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-status='" . htmlspecialchars((string)$row['Status'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-memorando='" . htmlspecialchars((string)$row['Memorando'], ENT_QUOTES, 'UTF-8') . "'
+                                      data-marca='" . htmlspecialchars((string)($row['marca'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-modelo='" . htmlspecialchars((string)($row['modelo'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-numero-serie='" . htmlspecialchars((string)($row['numero_serie'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-cor='" . htmlspecialchars((string)($row['cor'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-ano-aquisicao='" . htmlspecialchars((string)($row['ano_aquisicao'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-nfe-numero='" . htmlspecialchars((string)($row['nfe_numero'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-fornecedor-nome='" . htmlspecialchars((string)($row['fornecedor_nome'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-fornecedor-cnpj='" . htmlspecialchars((string)($row['fornecedor_cnpj'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-valor-unitario='" . htmlspecialchars((string)($row['valor_unitario'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-valor-total-nota='" . htmlspecialchars((string)($row['valor_total_nota'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-em-uso='" . htmlspecialchars((string)($row['em_uso'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-estado-conservacao='" . htmlspecialchars((string)($row['estado_conservacao'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-origem-aquisicao='" . htmlspecialchars((string)($row['origem_aquisicao'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      data-nota-fiscal-anexo='" . htmlspecialchars((string)($row['nota_fiscal_anexo'] ?? ''), ENT_QUOTES, 'UTF-8') . "'
+                                      onclick='abrirModalEditar(this)'>
                                       <i class='bi bi-pencil-fill'></i>
                                     </button>
                                     <button class='btn btn-danger btn-sm' title='Excluir'
@@ -320,6 +477,8 @@ if ($bootError === null) {
     <?php include './modals/modalCadastrar.php'; ?>
 
     <?php include './modals/modalEditar.php'; ?>
+
+    <?php include './modals/modalVisualizar.php'; ?>
 
     <?php include './modals/modalExcluir.php'; ?>
 

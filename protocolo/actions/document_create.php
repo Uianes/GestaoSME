@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../auth/session.php';
 require_once __DIR__ . '/../../auth/permissions.php';
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../group_helpers.php';
 
 require_login();
 if (!user_can_access_system('protocolo')) {
@@ -26,6 +27,7 @@ $unidadeOrigem = (int)($_POST['id_unidade_origem'] ?? 0);
 
 $destUsuarios = $_POST['dest_usuarios'] ?? [];
 $destUnidades = $_POST['dest_unidades'] ?? [];
+$destGrupos = $_POST['dest_grupos'] ?? [];
 $destExternos = $_POST['dest_externos'] ?? [];
 $signUsuarios = $_POST['sign_usuarios'] ?? [];
 $destUsuariosPronome = $_POST['dest_usuarios_pronome'] ?? [];
@@ -38,19 +40,20 @@ if ($tipoId <= 0 || $assunto === '' || $unidadeOrigem <= 0) {
 }
 
 $conn = db();
+$groupsReady = proto_groups_schema_ready($conn);
+$destUsuarios = is_array($destUsuarios) ? array_values(array_unique(array_filter(array_map('intval', $destUsuarios), static fn($id) => $id > 0))) : [];
+$destUnidades = is_array($destUnidades) ? array_values(array_unique(array_filter(array_map('intval', $destUnidades), static fn($id) => $id > 0))) : [];
+$destGrupos = is_array($destGrupos) ? array_values(array_unique(array_filter(array_map('intval', $destGrupos), static fn($id) => $id > 0))) : [];
+$groupUserIds = $groupsReady ? proto_expand_group_user_ids($conn, $destGrupos) : [];
 $totalDest = 0;
-if (is_array($destUsuarios)) {
-    foreach ($destUsuarios as $usuarioId) {
-        if ((int)$usuarioId > 0) {
-            $totalDest++;
-        }
+foreach (array_values(array_unique(array_merge($destUsuarios, $groupUserIds))) as $usuarioId) {
+    if ((int)$usuarioId > 0) {
+        $totalDest++;
     }
 }
-if (is_array($destUnidades)) {
-    foreach ($destUnidades as $unidadeId) {
-        if ((int)$unidadeId > 0) {
-            $totalDest++;
-        }
+foreach ($destUnidades as $unidadeId) {
+    if ((int)$unidadeId > 0) {
+        $totalDest++;
     }
 }
 if (is_array($destExternos)) {
@@ -100,18 +103,48 @@ try {
         $stmt->close();
     }
 
-    if (is_array($destUsuarios)) {
+    if ($groupsReady && !empty($destGrupos)) {
+        $stmt = $conn->prepare('INSERT INTO doc_documento_grupos (documento_id, grupo_id) VALUES (?, ?)');
+        foreach ($destGrupos as $grupoId) {
+            $stmt->bind_param('ii', $documentoId, $grupoId);
+            $stmt->execute();
+        }
+        $stmt->close();
+    }
+
+    $insertedUserIds = [];
+    if (!empty($destUsuarios)) {
         $stmt = $conn->prepare('INSERT INTO doc_destinatarios (documento_id, tipo_destino, ordem, usuario_destino, pronome_tratamento) VALUES (?, ?, ?, ?, ?)');
         $ordem = 1;
         foreach ($destUsuarios as $usuarioId) {
-            $usuarioId = (int)$usuarioId;
-            if ($usuarioId > 0) {
-                $tipo = 'interno';
-                $pronome = trim((string)($destUsuariosPronome[$usuarioId] ?? ''));
-                $stmt->bind_param('isiis', $documentoId, $tipo, $ordem, $usuarioId, $pronome);
-                $stmt->execute();
-                $ordem++;
+            $tipo = 'interno';
+            $pronome = trim((string)($destUsuariosPronome[$usuarioId] ?? ''));
+            $stmt->bind_param('isiis', $documentoId, $tipo, $ordem, $usuarioId, $pronome);
+            $stmt->execute();
+            $insertedUserIds[$usuarioId] = true;
+            $ordem++;
+        }
+        foreach ($groupUserIds as $usuarioId) {
+            if (!empty($insertedUserIds[$usuarioId])) {
+                continue;
             }
+            $tipo = 'interno';
+            $pronome = '';
+            $stmt->bind_param('isiis', $documentoId, $tipo, $ordem, $usuarioId, $pronome);
+            $stmt->execute();
+            $insertedUserIds[$usuarioId] = true;
+            $ordem++;
+        }
+        $stmt->close();
+    } elseif (!empty($groupUserIds)) {
+        $stmt = $conn->prepare('INSERT INTO doc_destinatarios (documento_id, tipo_destino, ordem, usuario_destino, pronome_tratamento) VALUES (?, ?, ?, ?, ?)');
+        $ordem = 1;
+        foreach ($groupUserIds as $usuarioId) {
+            $tipo = 'interno';
+            $pronome = '';
+            $stmt->bind_param('isiis', $documentoId, $tipo, $ordem, $usuarioId, $pronome);
+            $stmt->execute();
+            $ordem++;
         }
         $stmt->close();
     }
@@ -130,7 +163,7 @@ try {
         $stmt->close();
     }
 
-    if (is_array($destUnidades)) {
+    if (!empty($destUnidades)) {
         $stmt = $conn->prepare('INSERT INTO doc_destinatarios (documento_id, tipo_destino, ordem, id_unidade_destino, pronome_tratamento) VALUES (?, ?, ?, ?, ?)');
         $ordem = 1;
         foreach ($destUnidades as $unidadeId) {

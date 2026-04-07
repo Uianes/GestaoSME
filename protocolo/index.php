@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/../auth/permissions.php';
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/group_helpers.php';
 
 require_login();
 if (!user_can_access_system('protocolo')) {
@@ -50,6 +51,9 @@ while ($row = $result->fetch_assoc()) {
     $usuarios[] = $row;
 }
 
+$gruposDestinatarios = proto_fetch_recipient_groups($conn);
+$groupsSchemaReady = proto_groups_schema_ready($conn);
+
 function h($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
 $documento = null;
@@ -59,6 +63,7 @@ $numeracao = null;
 $anexos = [];
 $assinaturas = [];
 $auditoria = [];
+$documentoGrupos = [];
 $isModeloOficial = false;
 if ($docId > 0) {
     $stmt = $conn->prepare('
@@ -109,6 +114,8 @@ if ($docId > 0) {
         $stmt->execute();
         $destinatarios = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $stmt->close();
+
+        $documentoGrupos = proto_fetch_document_groups($conn, $docId);
 
         $stmt = $conn->prepare('SELECT * FROM doc_versoes WHERE documento_id = ? ORDER BY numero_versao DESC LIMIT 1');
         $stmt->bind_param('i', $docId);
@@ -246,6 +253,12 @@ $statusClasses = [
     <?php if ($flashError): ?>
       <div class="alert alert-danger"><?= h($flashError) ?></div>
     <?php endif; ?>
+    <?php if (!$groupsSchemaReady): ?>
+      <div class="alert alert-info">
+        Para habilitar grupos de destinatários, crie as tabelas:
+        <pre class="mb-0 mt-2 small"><code><?= h(proto_groups_schema_sql()) ?></code></pre>
+      </div>
+    <?php endif; ?>
 
     <div class="row g-3">
       <div class="col-12 col-lg-5">
@@ -305,6 +318,7 @@ $statusClasses = [
                       $destUsuariosPronome = [];
                       $destUnidadesPronome = [];
                       $destExternos = [];
+                      $destGruposIds = array_map(static fn($g) => (int)$g['id'], $documentoGrupos);
                       foreach ($destinatarios as $d) {
                           if ($d['tipo_destino'] === 'interno') {
                               if (!empty($d['usuario_destino'])) {
@@ -341,6 +355,7 @@ $statusClasses = [
                       data-destusuariospronome="<?= h(base64_encode(json_encode($destUsuariosPronome))) ?>"
                       data-destunidadespronome="<?= h(base64_encode(json_encode($destUnidadesPronome))) ?>"
                       data-destexternos="<?= h(base64_encode(json_encode($destExternos))) ?>"
+                      data-destgrupos="<?= h(base64_encode(json_encode($destGruposIds))) ?>"
                       data-signusuarios="<?= h(base64_encode(json_encode($signUsuariosIds))) ?>"
                     >Editar</button>
                   <?php endif; ?>
@@ -371,6 +386,19 @@ $statusClasses = [
                       </li>
                     <?php endforeach; ?>
                   </ul>
+                <?php endif; ?>
+              </div>
+
+              <div class="mb-3">
+                <div class="text-muted small">Grupos destinatários</div>
+                <?php if (empty($documentoGrupos)): ?>
+                  <div class="text-muted">Nenhum grupo vinculado.</div>
+                <?php else: ?>
+                  <div class="d-flex flex-wrap gap-2">
+                    <?php foreach ($documentoGrupos as $grupo): ?>
+                      <span class="badge text-bg-light border"><?= h($grupo['nome']) ?></span>
+                    <?php endforeach; ?>
+                  </div>
                 <?php endif; ?>
               </div>
 
@@ -542,7 +570,7 @@ $statusClasses = [
                       <input type="text" class="form-control" id="searchDestinatarios" placeholder="Buscar usuário ou unidade">
                     </div>
                     <div class="row g-3">
-                      <div class="col-md-6">
+                      <div class="col-md-4">
                         <label class="form-label">Usuários internos</label>
                         <div class="border rounded p-2" style="max-height: 240px; overflow:auto;">
                           <?php foreach ($usuarios as $usuario): ?>
@@ -572,7 +600,7 @@ $statusClasses = [
                           <?php endforeach; ?>
                         </div>
                       </div>
-                      <div class="col-md-6">
+                      <div class="col-md-4">
                         <label class="form-label">Unidades</label>
                         <div class="border rounded p-2" style="max-height: 240px; overflow:auto;">
                           <?php foreach ($unidades as $unidade): ?>
@@ -593,6 +621,26 @@ $statusClasses = [
                               </select>
                             </div>
                           <?php endforeach; ?>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <label class="form-label">Grupos</label>
+                        <div class="border rounded p-2" style="max-height: 240px; overflow:auto;">
+                          <?php if (empty($gruposDestinatarios)): ?>
+                            <div class="text-muted small">Nenhum grupo cadastrado.</div>
+                          <?php else: ?>
+                            <?php foreach ($gruposDestinatarios as $grupo): ?>
+                              <div class="dest-item" data-label="<?= h($grupo['nome']) ?>">
+                                <div class="form-check">
+                                  <input class="form-check-input" type="checkbox" name="dest_grupos[]" value="<?= (int)$grupo['id'] ?>" id="group-<?= (int)$grupo['id'] ?>">
+                                  <label class="form-check-label" for="group-<?= (int)$grupo['id'] ?>">
+                                    <?= h($grupo['nome']) ?>
+                                    <span class="text-muted small">(<?= (int)$grupo['total_usuarios'] ?>)</span>
+                                  </label>
+                                </div>
+                              </div>
+                            <?php endforeach; ?>
+                          <?php endif; ?>
                         </div>
                       </div>
                       <div class="col-12">
@@ -719,6 +767,24 @@ $statusClasses = [
                       </select>
                     </div>
                   <?php endforeach; ?>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Destinatários (grupos)</label>
+                <div class="border rounded p-2" style="max-height: 200px; overflow:auto;">
+                  <?php if (empty($gruposDestinatarios)): ?>
+                    <div class="text-muted small">Nenhum grupo cadastrado.</div>
+                  <?php else: ?>
+                    <?php foreach ($gruposDestinatarios as $grupo): ?>
+                      <div class="form-check dest-item" data-label="<?= h($grupo['nome']) ?>">
+                        <input class="form-check-input edit-dest-group" type="checkbox" name="dest_grupos[]" value="<?= (int)$grupo['id'] ?>" id="edit-group-<?= (int)$grupo['id'] ?>">
+                        <label class="form-check-label" for="edit-group-<?= (int)$grupo['id'] ?>">
+                          <?= h($grupo['nome']) ?>
+                          <span class="text-muted small">(<?= (int)$grupo['total_usuarios'] ?>)</span>
+                        </label>
+                      </div>
+                    <?php endforeach; ?>
+                  <?php endif; ?>
                 </div>
               </div>
               <div class="col-12">
@@ -923,6 +989,7 @@ $statusClasses = [
         const destUnidades = button.getAttribute('data-destunidades') || '';
         const destExternos = button.getAttribute('data-destexternos') || '';
         const signUsuarios = button.getAttribute('data-signusuarios') || '';
+        const destGrupos = button.getAttribute('data-destgrupos') || '';
         const destUsuariosPronome = button.getAttribute('data-destusuariospronome') || '';
         const destUnidadesPronome = button.getAttribute('data-destunidadespronome') || '';
 
@@ -938,12 +1005,16 @@ $statusClasses = [
 
         const selectedUsers = destUsuarios ? JSON.parse(atob(destUsuarios)) : [];
         const selectedUnits = destUnidades ? JSON.parse(atob(destUnidades)) : [];
+        const selectedGroups = destGrupos ? JSON.parse(atob(destGrupos)) : [];
         const selectedSigns = signUsuarios ? JSON.parse(atob(signUsuarios)) : [];
         document.querySelectorAll('.edit-dest-user').forEach((el) => {
           el.checked = selectedUsers.includes(parseInt(el.value, 10));
         });
         document.querySelectorAll('.edit-dest-unit').forEach((el) => {
           el.checked = selectedUnits.includes(parseInt(el.value, 10));
+        });
+        document.querySelectorAll('.edit-dest-group').forEach((el) => {
+          el.checked = selectedGroups.includes(parseInt(el.value, 10));
         });
 
         const userPronomeMap = {};
