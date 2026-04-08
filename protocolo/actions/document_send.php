@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../auth/session.php';
 require_once __DIR__ . '/../../auth/permissions.php';
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../mail_helpers.php';
 
 require_login();
 if (!user_can_access_system('protocolo')) {
@@ -161,36 +162,11 @@ try {
     }
     $tramStmt->close();
 
-    // Envios externos (email)
-    $envioStmt = $conn->prepare('INSERT INTO doc_envios (documento_id, canal, `para`, payload, status, criado_por) VALUES (?, ?, ?, ?, ?, ?)');
-    foreach ($destinos as $dest) {
-        if ($dest['tipo_destino'] !== 'externo') {
-            continue;
-        }
-        $email = trim((string)($dest['email_externo'] ?? ''));
-        if ($email === '') {
-            continue;
-        }
-        $canal = 'email';
-        $para = $email;
-        $payload = json_encode(['nome' => $dest['nome_externo'] ?? null]);
-        $status = 'pendente';
-        $envioStmt->bind_param('issssi', $documentoId, $canal, $para, $payload, $status, $matricula);
-        $envioStmt->execute();
-
-        $subject = 'Documento enviado - SME';
-        $message = 'Você recebeu um documento do sistema SME. Em breve enviaremos detalhes adicionais.';
-        $headers = 'From: no-reply@' . ($_SERVER['HTTP_HOST'] ?? 'saeducacao.com.br');
-        if (@mail($email, $subject, $message, $headers)) {
-            $conn->query('UPDATE doc_envios SET status = "enviado", enviado_em = NOW() WHERE id = ' . (int)$envioStmt->insert_id);
-        } else {
-            $conn->query('UPDATE doc_envios SET status = "falhou" WHERE id = ' . (int)$envioStmt->insert_id);
-        }
-    }
-    $envioStmt->close();
+    $mailResult = proto_send_document_emails($conn, $documentoId, $matricula, $destinos);
 
     $conn->commit();
-    $_SESSION['flash_success'] = 'Documento enviado com sucesso.';
+    $_SESSION['flash_success'] = 'Documento enviado com sucesso.'
+        . ($mailResult['total'] > 0 ? ' E-mail(s): ' . $mailResult['sent'] . ' enviado(s), ' . $mailResult['failed'] . ' falha(s).' : '');
     header('Location: ../index.php?doc=' . $documentoId);
     exit;
 } catch (Throwable $e) {

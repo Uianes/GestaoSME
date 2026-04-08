@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../auth/session.php';
 require_once __DIR__ . '/../../auth/permissions.php';
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../mail_helpers.php';
 
 require_login();
 if (!user_can_access_system('protocolo')) {
@@ -188,40 +189,16 @@ if ($pendentes === 0) {
         }
         $tramStmt->close();
 
-        // Envios externos (email) no envio automático
-        $envioStmt = $conn->prepare('INSERT INTO doc_envios (documento_id, canal, `para`, payload, status, criado_por) VALUES (?, ?, ?, ?, ?, ?)');
-        foreach ($destinos as $dest) {
-            if ($dest['tipo_destino'] !== 'externo') {
-                continue;
-            }
-            $email = trim((string)($dest['email_externo'] ?? ''));
-            if ($email === '') {
-                continue;
-            }
-            $canal = 'email';
-            $para = $email;
-            $payload = json_encode(['nome' => $dest['nome_externo'] ?? null]);
-            $status = 'pendente';
-            $envioStmt->bind_param('issssi', $documentoId, $canal, $para, $payload, $status, $criador);
-            $envioStmt->execute();
-
-            $subject = 'Documento enviado - SME';
-            $message = 'Você recebeu um documento do sistema SME. Em breve enviaremos detalhes adicionais.';
-            $headers = 'From: no-reply@' . ($_SERVER['HTTP_HOST'] ?? 'saeducacao.com.br');
-            if (@mail($email, $subject, $message, $headers)) {
-                $conn->query('UPDATE doc_envios SET status = "enviado", enviado_em = NOW() WHERE id = ' . (int)$envioStmt->insert_id);
-            } else {
-                $conn->query('UPDATE doc_envios SET status = "falhou" WHERE id = ' . (int)$envioStmt->insert_id);
-            }
-        }
-        $envioStmt->close();
+        $mailResult = proto_send_document_emails($conn, $documentoId, $criador, $destinos);
 
         // Auditoria
         $auditoria = [
             'acao' => 'envio_automatico',
             'documento_id' => $documentoId,
             'numero' => $hasNumero ? 'existente' : 'gerado',
-            'destinos' => count($destinos)
+            'destinos' => count($destinos),
+            'emails_enviados' => $mailResult['sent'] ?? 0,
+            'emails_falharam' => $mailResult['failed'] ?? 0
         ];
         $auditoriaJson = json_encode($auditoria, JSON_UNESCAPED_UNICODE);
         $stmt = $conn->prepare('INSERT INTO doc_auditoria (entidade, entidade_id, usuario, evento, detalhes) VALUES (?, ?, ?, ?, ?)');
@@ -233,6 +210,9 @@ if ($pendentes === 0) {
     }
 }
 
-$_SESSION['flash_success'] = $pendentes === 0 ? 'Assinatura registrada e documento enviado automaticamente.' : 'Assinatura registrada com sucesso.';
+$_SESSION['flash_success'] = $pendentes === 0
+    ? 'Assinatura registrada e documento enviado automaticamente.'
+        . (isset($mailResult) && ($mailResult['total'] ?? 0) > 0 ? ' E-mail(s): ' . $mailResult['sent'] . ' enviado(s), ' . $mailResult['failed'] . ' falha(s).' : '')
+    : 'Assinatura registrada com sucesso.';
 header('Location: ../index.php?doc=' . $documentoId);
 exit;
