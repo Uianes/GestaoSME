@@ -237,7 +237,6 @@ if (!function_exists('proto_send_document_emails')) {
         $conteudoHtml = preg_replace('#<style\b[^>]*>.*?</style>#is', '', $conteudoHtml ?? '');
         $conteudoHtml = trim((string)$conteudoHtml);
         $conteudoTexto = trim(html_entity_decode(strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>'], ["\n", "\n", "\n", "\n\n"], $conteudoHtml)), ENT_QUOTES, 'UTF-8'));
-        $appUrl = proto_mail_base_app_url() . url('app.php?page=protocolo&doc=' . $documentoId);
         $subject = $codigo !== ''
             ? $tipoNome . ' ' . $codigo . ' - ' . $assuntoDocumento
             : $tipoNome . ' - ' . $assuntoDocumento;
@@ -283,8 +282,6 @@ if (!function_exists('proto_send_document_emails')) {
                 . ($conteudoHtml !== ''
                     ? '<div>' . $conteudoHtml . '</div>'
                     : '<pre style="white-space:pre-wrap;">' . htmlspecialchars($conteudoTexto !== '' ? $conteudoTexto : 'Sem conteúdo.', ENT_QUOTES, 'UTF-8') . '</pre>')
-                . '<hr>'
-                . '<p><a href="' . htmlspecialchars($appUrl, ENT_QUOTES, 'UTF-8') . '">Abrir no protocolo</a></p>'
                 . '</body></html>';
 
             $body = "--{$boundary}\r\n"
