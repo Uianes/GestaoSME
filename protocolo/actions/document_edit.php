@@ -3,6 +3,7 @@ require_once __DIR__ . '/../../auth/session.php';
 require_once __DIR__ . '/../../auth/permissions.php';
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../group_helpers.php';
+require_once __DIR__ . '/../upload_helpers.php';
 
 require_login();
 if (!user_can_access_system('protocolo')) {
@@ -180,6 +181,10 @@ try {
     $stmt->bind_param('iisi', $documentoId, $novaVersao, $conteudo, $matricula);
     $stmt->execute();
     $stmt->close();
+
+    if (!empty($_FILES['anexos'])) {
+        proto_store_attachments($conn, $documentoId, $matricula, $_FILES['anexos'], 'anexos');
+    }
 
     $stmt = $conn->prepare('SELECT COUNT(*) AS total FROM doc_assinaturas WHERE documento_id = ?');
     $stmt->bind_param('i', $documentoId);

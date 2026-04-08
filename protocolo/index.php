@@ -462,9 +462,10 @@ $statusClasses = [
                 <form class="mb-3" method="post" action="actions/document_upload.php" enctype="multipart/form-data">
                   <input type="hidden" name="documento_id" value="<?= (int)$documento['id'] ?>">
                   <div class="input-group">
-                    <input class="form-control" type="file" name="anexo" required>
-                    <button class="btn btn-outline-primary" type="submit">Enviar anexo</button>
+                    <input class="form-control" type="file" name="anexos[]" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.gif" multiple required>
+                    <button class="btn btn-outline-primary" type="submit">Enviar anexo(s)</button>
                   </div>
+                  <div class="form-text">Formatos aceitos: PDF, Word, Excel e imagens.</div>
                 </form>
               <?php endif; ?>
 
@@ -505,7 +506,7 @@ $statusClasses = [
           <h5 class="modal-title" id="docModalLabel">Novo documento</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
         </div>
-        <form method="post" action="actions/document_create.php" id="docForm">
+        <form method="post" action="actions/document_create.php" id="docForm" enctype="multipart/form-data">
           <div class="modal-body">
             <div class="row g-3">
               <div class="col-md-6">
@@ -563,6 +564,11 @@ $statusClasses = [
                       </select>
                     </div>
                     <textarea id="docConteudo" name="conteudo"></textarea>
+                    <div class="mt-3">
+                      <label class="form-label">Anexos</label>
+                      <input class="form-control" type="file" name="anexos[]" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.gif" multiple>
+                      <div class="form-text">Você pode anexar PDF, Word, Excel ou imagens.</div>
+                    </div>
                   </div>
                   <div class="tab-pane fade" id="dest-pane" role="tabpanel" aria-labelledby="dest-tab">
                     <div class="mb-3">
@@ -697,7 +703,7 @@ $statusClasses = [
           <h5 class="modal-title" id="editModalLabel">Editar documento</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
         </div>
-        <form method="post" action="actions/document_edit.php" id="editForm">
+        <form method="post" action="actions/document_edit.php" id="editForm" enctype="multipart/form-data">
           <div class="modal-body">
             <input type="hidden" name="documento_id" id="editDocumentoId">
             <div class="row g-3">
@@ -715,6 +721,11 @@ $statusClasses = [
               <div class="col-12">
                 <label class="form-label">Conteúdo</label>
                 <textarea id="docConteudoEdit" name="conteudo"></textarea>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Novos anexos</label>
+                <input class="form-control" type="file" name="anexos[]" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.gif" multiple>
+                <div class="form-text">Os anexos atuais serão mantidos. Os arquivos selecionados serão adicionados ao documento.</div>
               </div>
               <div class="col-12">
                 <label class="form-label">Destinatários (usuários)</label>

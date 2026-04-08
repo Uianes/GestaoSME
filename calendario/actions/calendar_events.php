@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../auth/session.php';
 require_once __DIR__ . '/../../auth/permissions.php';
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../protocolo/group_helpers.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -117,6 +118,22 @@ function calendar_build_recipients(mysqli $conn, int $creator, array $selectedUs
     return array_keys($recipients);
 }
 
+function calendar_groups_enabled(mysqli $conn): bool
+{
+    return proto_groups_schema_ready($conn)
+        && proto_group_table_exists($conn, 'evento_grupos')
+        && proto_group_column_exists($conn, 'evento_grupos', 'evento_id')
+        && proto_group_column_exists($conn, 'evento_grupos', 'grupo_id');
+}
+
+function calendar_normalize_ids($values): array
+{
+    if (!is_array($values)) {
+        return [];
+    }
+    return array_values(array_unique(array_filter(array_map('intval', $values), static fn($id) => $id > 0)));
+}
+
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 if ($method === 'GET') {
     $stmt = $conn->prepare('
@@ -162,12 +179,12 @@ if ($action === 'create') {
 
     $selectedUsers = $input['usuarios'] ?? [];
     $selectedUnidades = $input['unidades'] ?? [];
-    if (!is_array($selectedUsers)) {
-        $selectedUsers = [];
-    }
-    if (!is_array($selectedUnidades)) {
-        $selectedUnidades = [];
-    }
+    $selectedGroups = $input['grupos'] ?? [];
+    $selectedUsers = calendar_normalize_ids($selectedUsers);
+    $selectedUnidades = calendar_normalize_ids($selectedUnidades);
+    $selectedGroups = calendar_normalize_ids($selectedGroups);
+    $groupUsers = calendar_groups_enabled($conn) ? proto_expand_group_user_ids($conn, $selectedGroups) : [];
+    $selectedUsers = array_values(array_unique(array_merge($selectedUsers, $groupUsers)));
 
     if ($titulo === '' || !$inicio) {
         http_response_code(422);
@@ -215,6 +232,15 @@ if ($action === 'create') {
             }
         }
         $unitStmt->close();
+    }
+
+    if (calendar_groups_enabled($conn) && !empty($selectedGroups)) {
+        $groupStmt = $conn->prepare('INSERT INTO evento_grupos (evento_id, grupo_id) VALUES (?, ?)');
+        foreach ($selectedGroups as $groupId) {
+            $groupStmt->bind_param('ii', $eventId, $groupId);
+            $groupStmt->execute();
+        }
+        $groupStmt->close();
     }
 
     $notifTitle = 'Novo evento: ' . $titulo;
@@ -281,7 +307,17 @@ if ($action === 'details') {
         $units[] = (int)$row['id_unidade'];
     }
 
-    echo json_encode(['ok' => true, 'usuarios' => $users, 'unidades' => $units]);
+    $groups = [];
+    if (calendar_groups_enabled($conn)) {
+        $result = $conn->query('SELECT grupo_id FROM evento_grupos WHERE evento_id = ' . (int)$eventId);
+        if ($result instanceof mysqli_result) {
+            while ($row = $result->fetch_assoc()) {
+                $groups[] = (int)$row['grupo_id'];
+            }
+        }
+    }
+
+    echo json_encode(['ok' => true, 'usuarios' => $users, 'unidades' => $units, 'grupos' => $groups]);
     exit;
 }
 
@@ -337,12 +373,12 @@ if ($action === 'update') {
 
     $selectedUsers = $input['usuarios'] ?? [];
     $selectedUnidades = $input['unidades'] ?? [];
-    if (!is_array($selectedUsers)) {
-        $selectedUsers = [];
-    }
-    if (!is_array($selectedUnidades)) {
-        $selectedUnidades = [];
-    }
+    $selectedGroups = $input['grupos'] ?? [];
+    $selectedUsers = calendar_normalize_ids($selectedUsers);
+    $selectedUnidades = calendar_normalize_ids($selectedUnidades);
+    $selectedGroups = calendar_normalize_ids($selectedGroups);
+    $groupUsers = calendar_groups_enabled($conn) ? proto_expand_group_user_ids($conn, $selectedGroups) : [];
+    $selectedUsers = array_values(array_unique(array_merge($selectedUsers, $groupUsers)));
 
     $recipients = calendar_build_recipients($conn, $criador, $selectedUsers, $selectedUnidades);
 
@@ -378,6 +414,18 @@ if ($action === 'update') {
             }
         }
         $unitStmt->close();
+    }
+
+    if (calendar_groups_enabled($conn)) {
+        $conn->query('DELETE FROM evento_grupos WHERE evento_id = ' . (int)$eventId);
+        if (!empty($selectedGroups)) {
+            $groupStmt = $conn->prepare('INSERT INTO evento_grupos (evento_id, grupo_id) VALUES (?, ?)');
+            foreach ($selectedGroups as $groupId) {
+                $groupStmt->bind_param('ii', $eventId, $groupId);
+                $groupStmt->execute();
+            }
+            $groupStmt->close();
+        }
     }
 
     $notifTitle = 'Evento atualizado: ' . $titulo;
@@ -468,6 +516,9 @@ if ($action === 'delete') {
     $conn->query('DELETE FROM evento_destinatarios WHERE evento_id = ' . (int)$eventId);
     $conn->query('DELETE FROM evento_usuarios WHERE evento_id = ' . (int)$eventId);
     $conn->query('DELETE FROM evento_unidades WHERE evento_id = ' . (int)$eventId);
+    if (calendar_groups_enabled($conn)) {
+        $conn->query('DELETE FROM evento_grupos WHERE evento_id = ' . (int)$eventId);
+    }
     $conn->query('DELETE FROM eventos WHERE id = ' . (int)$eventId);
 
     echo json_encode(['ok' => true]);

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../auth/permissions.php';
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../protocolo/group_helpers.php';
 
 if (!user_can_access_system('calendario')) {
     ?>
@@ -37,6 +38,12 @@ $result = $conn->query('SELECT id_unidade, nome FROM unidade ORDER BY nome');
 while ($row = $result->fetch_assoc()) {
     $unidades[] = $row;
 }
+
+$grupos = proto_fetch_recipient_groups($conn);
+$groupsSchemaReady = proto_groups_schema_ready($conn);
+$hasEventoGruposTable = proto_group_table_exists($conn, 'evento_grupos')
+    && proto_group_column_exists($conn, 'evento_grupos', 'evento_id')
+    && proto_group_column_exists($conn, 'evento_grupos', 'grupo_id');
 ?>
 <!doctype html>
 <html lang="pt-br">
@@ -135,6 +142,17 @@ while ($row = $result->fetch_assoc()) {
       </div>
     </div>
 
+    <?php if (!$groupsSchemaReady || !$hasEventoGruposTable): ?>
+      <div class="alert alert-info">
+        Para habilitar grupos no calendário, garanta as tabelas de grupos e crie também:
+        <pre class="mb-0 mt-2 small"><code>CREATE TABLE evento_grupos (
+  evento_id INT NOT NULL,
+  grupo_id INT NOT NULL,
+  PRIMARY KEY (evento_id, grupo_id)
+);</code></pre>
+      </div>
+    <?php endif; ?>
+
     <div class="card calendar-card">
       <div class="card-body">
         <div id="calendar"></div>
@@ -181,10 +199,15 @@ while ($row = $result->fetch_assoc()) {
               <textarea class="form-control" id="eventDescription" rows="3"></textarea>
             </div>
             <div class="col-md-6">
+              <label class="form-label">Buscar usuários</label>
+              <input type="text" class="form-control" id="eventUserSearch" placeholder="Buscar usuário por nome">
+            </div>
+            <div class="col-md-6"></div>
+            <div class="col-md-4">
               <label class="form-label">Usuários</label>
               <div class="border rounded p-2" style="max-height: 240px; overflow: auto;">
                 <?php foreach ($usuarios as $usuario): ?>
-                  <div class="form-check">
+                  <div class="form-check calendar-user-item" data-label="<?= htmlspecialchars($usuario['nome'], ENT_QUOTES, 'UTF-8') ?>">
                     <input
                       class="form-check-input"
                       type="checkbox"
@@ -199,7 +222,7 @@ while ($row = $result->fetch_assoc()) {
                 <?php endforeach; ?>
               </div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
               <label class="form-label">Escolas/Unidades</label>
               <div class="border rounded p-2" style="max-height: 240px; overflow: auto;">
                 <?php foreach ($unidades as $unidade): ?>
@@ -216,6 +239,30 @@ while ($row = $result->fetch_assoc()) {
                     </label>
                   </div>
                 <?php endforeach; ?>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Grupos</label>
+              <div class="border rounded p-2" style="max-height: 240px; overflow: auto;">
+                <?php if (empty($grupos)): ?>
+                  <div class="text-muted small">Nenhum grupo cadastrado.</div>
+                <?php else: ?>
+                  <?php foreach ($grupos as $grupo): ?>
+                    <div class="form-check">
+                      <input
+                        class="form-check-input"
+                        type="checkbox"
+                        name="eventGroups[]"
+                        value="<?= (int)$grupo['id'] ?>"
+                        id="group-<?= (int)$grupo['id'] ?>"
+                      >
+                      <label class="form-check-label" for="group-<?= (int)$grupo['id'] ?>">
+                        <?= htmlspecialchars($grupo['nome'], ENT_QUOTES, 'UTF-8') ?>
+                        <span class="text-muted small">(<?= (int)$grupo['total_usuarios'] ?>)</span>
+                      </label>
+                    </div>
+                  <?php endforeach; ?>
+                <?php endif; ?>
               </div>
             </div>
           </div>
@@ -274,6 +321,12 @@ while ($row = $result->fetch_assoc()) {
 
   function clearUnitCheckboxes() {
     document.querySelectorAll('input[name="eventUnits[]"]').forEach((checkbox) => {
+      checkbox.checked = false;
+    });
+  }
+
+  function clearGroupCheckboxes() {
+    document.querySelectorAll('input[name="eventGroups[]"]').forEach((checkbox) => {
       checkbox.checked = false;
     });
   }
@@ -340,6 +393,7 @@ while ($row = $result->fetch_assoc()) {
       }
       clearUserCheckboxes();
       clearUnitCheckboxes();
+      clearGroupCheckboxes();
       setReadOnly(false);
       deleteBtn.classList.add('d-none');
       eventModal.show();
@@ -357,6 +411,7 @@ while ($row = $result->fetch_assoc()) {
       document.getElementById('eventEnd').value = event.end ? toLocalInputValue(event.end) : '';
       clearUserCheckboxes();
       clearUnitCheckboxes();
+      clearGroupCheckboxes();
 
       const details = await fetchDetails(event.id);
       if (details && details.ok) {
@@ -366,6 +421,10 @@ while ($row = $result->fetch_assoc()) {
         });
         details.unidades.forEach((id) => {
           const checkbox = document.getElementById(`unit-${id}`);
+          if (checkbox) checkbox.checked = true;
+        });
+        (details.grupos || []).forEach((id) => {
+          const checkbox = document.getElementById(`group-${id}`);
           if (checkbox) checkbox.checked = true;
         });
       }
@@ -423,7 +482,8 @@ while ($row = $result->fetch_assoc()) {
       fim: document.getElementById('eventEnd').value,
       allDay: document.getElementById('eventAllDay').checked,
       usuarios: Array.from(document.querySelectorAll('input[name=\"eventUsers[]\"]:checked')).map(opt => opt.value),
-      unidades: Array.from(document.querySelectorAll('input[name="eventUnits[]"]:checked')).map(opt => opt.value)
+      unidades: Array.from(document.querySelectorAll('input[name="eventUnits[]"]:checked')).map(opt => opt.value),
+      grupos: Array.from(document.querySelectorAll('input[name="eventGroups[]"]:checked')).map(opt => opt.value)
     };
 
     try {
@@ -447,6 +507,21 @@ while ($row = $result->fetch_assoc()) {
       showError(error.message);
     }
   });
+
+  const userSearch = document.getElementById('eventUserSearch');
+  const userItems = Array.from(document.querySelectorAll('.calendar-user-item'));
+  function normalizeText(value) {
+    return (value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+  if (userSearch) {
+    userSearch.addEventListener('input', () => {
+      const term = normalizeText(userSearch.value.trim());
+      userItems.forEach((item) => {
+        const label = normalizeText(item.getAttribute('data-label'));
+        item.style.display = label.includes(term) ? '' : 'none';
+      });
+    });
+  }
   </script>
 </body>
 </html>
