@@ -46,47 +46,7 @@ $destUsuarios = is_array($destUsuarios) ? array_values(array_unique(array_filter
 $destUnidades = is_array($destUnidades) ? array_values(array_unique(array_filter(array_map('intval', $destUnidades), static fn($id) => $id > 0))) : [];
 $destGrupos = is_array($destGrupos) ? array_values(array_unique(array_filter(array_map('intval', $destGrupos), static fn($id) => $id > 0))) : [];
 $groupUserIds = $groupsReady ? proto_expand_group_user_ids($conn, $destGrupos) : [];
-$totalDest = 0;
-foreach (array_values(array_unique(array_merge($destUsuarios, $groupUserIds))) as $usuarioId) {
-    if ((int)$usuarioId > 0) {
-        $totalDest++;
-    }
-}
-foreach ($destUnidades as $unidadeId) {
-    if ((int)$unidadeId > 0) {
-        $totalDest++;
-    }
-}
-if (is_array($destExternos)) {
-    foreach ($destExternos as $externo) {
-        if (!is_array($externo)) {
-            continue;
-        }
-        $nome = trim((string)($externo['nome'] ?? ''));
-        $email = trim((string)($externo['email'] ?? ''));
-        if ($nome !== '' || $email !== '') {
-            $totalDest++;
-        }
-    }
-}
 
-$stmt = $conn->prepare('SELECT id, nome FROM doc_tipos WHERE id = ?');
-$stmt->bind_param('i', $tipoId);
-$stmt->execute();
-$tipoAtual = $stmt->get_result()->fetch_assoc();
-$stmt->close();
-
-if ($tipoAtual && strtolower((string)$tipoAtual['nome']) === 'memorando' && $totalDest > 1) {
-    $stmt = $conn->prepare('SELECT id FROM doc_tipos WHERE nome = ? LIMIT 1');
-    $tipoNome = 'Memorando Circular';
-    $stmt->bind_param('s', $tipoNome);
-    $stmt->execute();
-    $tipoCircular = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-    if ($tipoCircular) {
-        $tipoId = (int)$tipoCircular['id'];
-    }
-}
 $conn->begin_transaction();
 try {
     $statusId = 1; // rascunho

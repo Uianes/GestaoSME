@@ -19,6 +19,7 @@ if ($docId <= 0) {
 
 $conn = db();
 $matricula = (int)($_SESSION['user']['matricula'] ?? 0);
+$userIsAdmin = user_is_admin();
 
 $stmt = $conn->prepare('
     SELECT d.*, t.nome AS tipo_nome, uo.nome AS unidade_origem_nome
@@ -38,25 +39,31 @@ if (!$documento) {
     exit;
 }
 
-$stmt = $conn->prepare('
-    SELECT 1
-    FROM doc_documentos d
-    LEFT JOIN doc_destinatarios dd ON dd.documento_id = d.id
-    LEFT JOIN doc_permissoes dp ON dp.documento_id = d.id
-    LEFT JOIN vinculo v ON v.matricula = ?
-    WHERE d.id = ?
-      AND (
-        d.criado_por = ?
-        OR dd.usuario_destino = ?
-        OR dp.usuario = ?
-        OR (dd.id_unidade_destino IS NOT NULL AND dd.id_unidade_destino = v.id_unidade)
-      )
-    LIMIT 1
-');
-$stmt->bind_param('iiiii', $matricula, $docId, $matricula, $matricula, $matricula);
-$stmt->execute();
-$allowed = (bool)$stmt->get_result()->fetch_assoc();
-$stmt->close();
+if ($userIsAdmin) {
+    $allowed = true;
+} else {
+    $stmt = $conn->prepare('
+        SELECT 1
+        FROM doc_documentos d
+        LEFT JOIN doc_destinatarios dd ON dd.documento_id = d.id
+        LEFT JOIN doc_permissoes dp ON dp.documento_id = d.id
+        LEFT JOIN doc_assinaturas da ON da.documento_id = d.id
+        LEFT JOIN vinculo v ON v.matricula = ?
+        WHERE d.id = ?
+          AND (
+            d.criado_por = ?
+            OR dd.usuario_destino = ?
+            OR dp.usuario = ?
+            OR da.usuario = ?
+            OR (dd.id_unidade_destino IS NOT NULL AND dd.id_unidade_destino = v.id_unidade)
+          )
+        LIMIT 1
+    ');
+    $stmt->bind_param('iiiiii', $matricula, $docId, $matricula, $matricula, $matricula, $matricula);
+    $stmt->execute();
+    $allowed = (bool)$stmt->get_result()->fetch_assoc();
+    $stmt->close();
+}
 
 if (!$allowed) {
     http_response_code(403);

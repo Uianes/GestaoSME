@@ -27,6 +27,7 @@ if (!user_can_access_system('protocolo')) {
 
 $conn = db();
 $matricula = (int)($_SESSION['user']['matricula'] ?? 0);
+$userIsAdmin = user_is_admin();
 $docId = (int)($_GET['doc'] ?? 0);
 
 $flashSuccess = $_SESSION['flash_success'] ?? null;
@@ -78,23 +79,25 @@ if ($docId > 0) {
     $documento = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 
-    if ($documento) {
+    if ($documento && !$userIsAdmin) {
         $stmt = $conn->prepare('
             SELECT 1
             FROM doc_documentos d
             LEFT JOIN doc_destinatarios dd ON dd.documento_id = d.id
             LEFT JOIN doc_permissoes dp ON dp.documento_id = d.id
+            LEFT JOIN doc_assinaturas da ON da.documento_id = d.id
             LEFT JOIN vinculo v ON v.matricula = ?
             WHERE d.id = ?
               AND (
                 d.criado_por = ?
                 OR dd.usuario_destino = ?
                 OR dp.usuario = ?
+                OR da.usuario = ?
                 OR (dd.id_unidade_destino IS NOT NULL AND dd.id_unidade_destino = v.id_unidade)
               )
             LIMIT 1
         ');
-        $stmt->bind_param('iiiii', $matricula, $docId, $matricula, $matricula, $matricula);
+        $stmt->bind_param('iiiiii', $matricula, $docId, $matricula, $matricula, $matricula, $matricula);
         $stmt->execute();
         $allowed = (bool)$stmt->get_result()->fetch_assoc();
         $stmt->close();
@@ -162,23 +165,37 @@ if ($docId > 0) {
 }
 
 $docs = [];
-$stmt = $conn->prepare('
-    SELECT DISTINCT d.id, d.assunto, d.criado_em, s.nome AS status_nome, t.nome AS tipo_nome, n.codigo_formatado
-    FROM doc_documentos d
-    INNER JOIN doc_status s ON s.id = d.status_id
-    INNER JOIN doc_tipos t ON t.id = d.tipo_id
-    LEFT JOIN doc_numeracao n ON n.documento_id = d.id
-    LEFT JOIN doc_destinatarios dd ON dd.documento_id = d.id
-    LEFT JOIN doc_permissoes dp ON dp.documento_id = d.id
-    LEFT JOIN vinculo v ON v.matricula = ?
-    WHERE d.criado_por = ?
-       OR dd.usuario_destino = ?
-       OR dp.usuario = ?
-       OR (dd.id_unidade_destino IS NOT NULL AND dd.id_unidade_destino = v.id_unidade)
-    ORDER BY d.criado_em DESC
-    LIMIT 200
-');
-$stmt->bind_param('iiii', $matricula, $matricula, $matricula, $matricula);
+if ($userIsAdmin) {
+    $stmt = $conn->prepare('
+        SELECT DISTINCT d.id, d.assunto, d.criado_em, s.nome AS status_nome, t.nome AS tipo_nome, n.codigo_formatado
+        FROM doc_documentos d
+        INNER JOIN doc_status s ON s.id = d.status_id
+        INNER JOIN doc_tipos t ON t.id = d.tipo_id
+        LEFT JOIN doc_numeracao n ON n.documento_id = d.id
+        ORDER BY d.criado_em DESC
+        LIMIT 200
+    ');
+} else {
+    $stmt = $conn->prepare('
+        SELECT DISTINCT d.id, d.assunto, d.criado_em, s.nome AS status_nome, t.nome AS tipo_nome, n.codigo_formatado
+        FROM doc_documentos d
+        INNER JOIN doc_status s ON s.id = d.status_id
+        INNER JOIN doc_tipos t ON t.id = d.tipo_id
+        LEFT JOIN doc_numeracao n ON n.documento_id = d.id
+        LEFT JOIN doc_destinatarios dd ON dd.documento_id = d.id
+        LEFT JOIN doc_permissoes dp ON dp.documento_id = d.id
+        LEFT JOIN doc_assinaturas da ON da.documento_id = d.id
+        LEFT JOIN vinculo v ON v.matricula = ?
+        WHERE d.criado_por = ?
+           OR dd.usuario_destino = ?
+           OR dp.usuario = ?
+           OR da.usuario = ?
+           OR (dd.id_unidade_destino IS NOT NULL AND dd.id_unidade_destino = v.id_unidade)
+        ORDER BY d.criado_em DESC
+        LIMIT 200
+    ');
+    $stmt->bind_param('iiiii', $matricula, $matricula, $matricula, $matricula, $matricula);
+}
 $stmt->execute();
 $result = $stmt->get_result();
 while ($row = $result->fetch_assoc()) {
@@ -209,10 +226,25 @@ $statusClasses = [
     body { background: #f6f8fb; }
     .card { border-radius: 14px; }
     .badge-status { text-transform: capitalize; }
-    .doc-content table { width: 100%; border-collapse: collapse; }
-    .doc-content th, .doc-content td { border: 1px solid #cbd5e1; padding: 6px 8px; }
+    .doc-content { overflow-x: auto; }
+    .doc-content * { max-width: 100%; }
+    .doc-content table {
+      width: 100% !important;
+      max-width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    .doc-content th, .doc-content td {
+      border: 1px solid #cbd5e1;
+      padding: 6px 8px;
+      white-space: normal;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      vertical-align: top;
+    }
     .doc-content th { background: #f8fafc; }
     .doc-content img { max-width: 100%; height: auto; }
+    .doc-content colgroup col { width: auto !important; }
     .doc-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .doc-actions .badge { white-space: nowrap; }
     .dest-row { display: grid; grid-template-columns: 1fr; gap: 8px; }
@@ -511,7 +543,7 @@ $statusClasses = [
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label">Tipo</label>
-                <select class="form-select" name="tipo_id" required>
+                <select class="form-select" name="tipo_id" id="docTipoId" required>
                   <option value="">Selecione</option>
                   <?php foreach ($tipos as $tipo): ?>
                     <option value="<?= (int)$tipo['id'] ?>"><?= h($tipo['nome']) ?></option>
@@ -539,6 +571,9 @@ $statusClasses = [
                 </div>
               </div>
               <div class="col-12">
+                <div class="alert alert-warning d-none mb-3" id="memorandoCircularHint">
+                  Há mais de um destinatário selecionado. Se a intenção for enviar um documento coletivo, considere usar o tipo <strong>Memorando Circular</strong>.
+                </div>
                 <ul class="nav nav-tabs" id="docTabs" role="tablist">
                   <li class="nav-item" role="presentation">
                     <button class="nav-link active" id="content-tab" data-bs-toggle="tab" data-bs-target="#content-pane" type="button" role="tab" aria-controls="content-pane" aria-selected="true">Conteúdo</button>
@@ -840,16 +875,17 @@ $statusClasses = [
       menubar: false,
       branding: false,
       plugins: 'lists link image table code',
-      toolbar: 'undo redo | styles | bold italic underline | alignleft aligncenter alignright | bullist numlist | table | link image | code',
+      toolbar: 'undo redo | blocks fontsize | bold italic underline | alignleft aligncenter alignright | bullist numlist | table | link image | code',
       toolbar_mode: 'wrap',
       toolbar_groups: {
         format: { icon: 'bold', tooltip: 'Formatação' }
       },
-      toolbar1: 'undo redo | styles | bold italic underline | alignleft aligncenter alignright',
+      toolbar1: 'undo redo | blocks fontsize | bold italic underline | alignleft aligncenter alignright',
       toolbar2: 'bullist numlist | table | link image | code',
       statusbar: false,
       image_title: true,
       automatic_uploads: false,
+      font_size_formats: '8pt 9pt 10pt 11pt 12pt 14pt 16pt 18pt 20pt 24pt 28pt 32pt',
       images_upload_handler: (blobInfo, progress) => new Promise((resolve) => {
         const base64 = 'data:' + blobInfo.blob().type + ';base64,' + blobInfo.base64();
         resolve(base64);
@@ -1175,7 +1211,41 @@ $statusClasses = [
 
     const externosContainer = document.getElementById('externos');
     const addExternoBtn = document.getElementById('addExterno');
+    const docTipoSelect = document.getElementById('docTipoId');
+    const memorandoCircularHint = document.getElementById('memorandoCircularHint');
     let externoIndex = 0;
+    function countDestinatariosNovoDocumento() {
+      let total = 0;
+      document.querySelectorAll('input[name="dest_usuarios[]"]:checked').forEach(() => total++);
+      document.querySelectorAll('input[name="dest_unidades[]"]:checked').forEach(() => total++);
+      document.querySelectorAll('input[name="dest_grupos[]"]:checked').forEach(() => total++);
+      document.querySelectorAll('#externos input[name^="dest_externos["]').forEach((input) => {
+        if (!input.name.endsWith('[nome]')) {
+          return;
+        }
+        const indexMatch = input.name.match(/dest_externos\[(\d+)\]/);
+        const index = indexMatch ? indexMatch[1] : null;
+        if (index === null) {
+          return;
+        }
+        const nome = (input.value || '').trim();
+        const emailInput = document.querySelector(`#externos input[name="dest_externos[${index}][email]"]`);
+        const email = emailInput ? (emailInput.value || '').trim() : '';
+        if (nome !== '' || email !== '') {
+          total++;
+        }
+      });
+      return total;
+    }
+    function atualizarAvisoMemorandoCircular() {
+      if (!docTipoSelect || !memorandoCircularHint) {
+        return;
+      }
+      const tipoSelecionado = (docTipoSelect.options[docTipoSelect.selectedIndex]?.text || '').trim().toLowerCase();
+      const isMemorando = tipoSelecionado === 'memorando';
+      const hasMultiplosDestinatarios = countDestinatariosNovoDocumento() > 1;
+      memorandoCircularHint.classList.toggle('d-none', !(isMemorando && hasMultiplosDestinatarios));
+    }
     function addExterno() {
       const wrapper = document.createElement('div');
       wrapper.className = 'row g-2 mb-2';
@@ -1212,9 +1282,20 @@ $statusClasses = [
       `;
       externosContainer.appendChild(wrapper);
       externoIndex += 1;
+      wrapper.querySelectorAll('input').forEach((input) => {
+        input.addEventListener('input', atualizarAvisoMemorandoCircular);
+      });
+      atualizarAvisoMemorandoCircular();
     }
     addExternoBtn.addEventListener('click', addExterno);
     addExterno();
+
+    if (docTipoSelect) {
+      docTipoSelect.addEventListener('change', atualizarAvisoMemorandoCircular);
+    }
+    document.querySelectorAll('input[name="dest_usuarios[]"], input[name="dest_unidades[]"], input[name="dest_grupos[]"]').forEach((input) => {
+      input.addEventListener('change', atualizarAvisoMemorandoCircular);
+    });
 
     const destSearch = document.getElementById('searchDestinatarios');
     const destItems = Array.from(document.querySelectorAll('.dest-item'));
@@ -1233,6 +1314,7 @@ $statusClasses = [
         });
       });
     }
+    atualizarAvisoMemorandoCircular();
 
     const signSearch = document.getElementById('searchAssinaturas');
     const signItems = Array.from(document.querySelectorAll('.sign-item'));

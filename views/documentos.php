@@ -15,6 +15,7 @@ if (!user_can_access_system('documentos') && !user_can_access_system('protocolo'
 
 $conn = db();
 $matricula = (int)($_SESSION['user']['matricula'] ?? 0);
+$userIsAdmin = user_is_admin();
 
 function h_doc_repo($value): string
 {
@@ -129,34 +130,37 @@ if ($schemaOk) {
         }
     }
 
-    $accessClause = '
-        (
-            d.criado_por = ?
-            OR EXISTS (
-                SELECT 1
-                FROM doc_destinatarios dd1
-                WHERE dd1.documento_id = d.id
-                  AND dd1.usuario_destino = ?
+    $where = [];
+    $params = [];
+    if (!$userIsAdmin) {
+        $accessClause = '
+            (
+                d.criado_por = ?
+                OR EXISTS (
+                    SELECT 1
+                    FROM doc_destinatarios dd1
+                    WHERE dd1.documento_id = d.id
+                      AND dd1.usuario_destino = ?
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM doc_permissoes dp1
+                    WHERE dp1.documento_id = d.id
+                      AND dp1.usuario = ?
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM doc_destinatarios dd2
+                    INNER JOIN vinculo v2 ON v2.id_unidade = dd2.id_unidade_destino
+                    WHERE dd2.documento_id = d.id
+                      AND dd2.id_unidade_destino IS NOT NULL
+                      AND v2.matricula = ?
+                )
             )
-            OR EXISTS (
-                SELECT 1
-                FROM doc_permissoes dp1
-                WHERE dp1.documento_id = d.id
-                  AND dp1.usuario = ?
-            )
-            OR EXISTS (
-                SELECT 1
-                FROM doc_destinatarios dd2
-                INNER JOIN vinculo v2 ON v2.id_unidade = dd2.id_unidade_destino
-                WHERE dd2.documento_id = d.id
-                  AND dd2.id_unidade_destino IS NOT NULL
-                  AND v2.matricula = ?
-            )
-        )
-    ';
-
-    $where = ["{$accessClause}"];
-    $params = [$matricula, $matricula, $matricula, $matricula];
+        ';
+        $where[] = $accessClause;
+        $params = [$matricula, $matricula, $matricula, $matricula];
+    }
 
     if ($filters['q'] !== '') {
         $like = '%' . $filters['q'] . '%';
@@ -218,7 +222,7 @@ if ($schemaOk) {
         $params[] = $filters['editado_ate'];
     }
 
-    $whereSql = 'WHERE ' . implode(' AND ', $where);
+    $whereSql = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
 
     $countSql = "
         SELECT COUNT(DISTINCT d.id) AS total
@@ -296,10 +300,18 @@ if ($schemaOk) {
             LEFT JOIN unidade u ON u.id_unidade = d.id_unidade_origem
             LEFT JOIN doc_numeracao n ON n.documento_id = d.id
             WHERE d.id = ?
-              AND {$accessClause}
-            LIMIT 1
+        LIMIT 1
         ";
-        $detailParams = [$selectedDocId, $matricula, $matricula, $matricula, $matricula];
+        $detailParams = [$selectedDocId];
+        if (!$userIsAdmin) {
+            $detailSql = str_replace(
+                'LIMIT 1',
+                '  AND ' . $accessClause . '
+            LIMIT 1',
+                $detailSql
+            );
+            array_push($detailParams, $matricula, $matricula, $matricula, $matricula);
+        }
         $resDetail = doc_repo_run_query($conn, $detailSql, $detailParams);
         if ($resDetail instanceof mysqli_result) {
             $selectedDoc = mysqli_fetch_assoc($resDetail) ?: null;

@@ -203,6 +203,34 @@ if (!function_exists('proto_send_document_emails')) {
 }
 
 if (!function_exists('proto_send_document_emails')) {
+    function proto_collect_email_attachments(mysqli $conn, int $documentoId): array
+    {
+        $attachments = [];
+        $stmt = $conn->prepare('SELECT nome_arquivo, caminho_storage, mime_type FROM doc_anexos WHERE documento_id = ? ORDER BY enviado_em DESC');
+        $stmt->bind_param('i', $documentoId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $relativePath = ltrim((string)($row['caminho_storage'] ?? ''), '/');
+            if ($relativePath === '') {
+                continue;
+            }
+            $absolutePath = realpath(__DIR__ . '/../' . $relativePath);
+            if ($absolutePath === false || !is_file($absolutePath) || !is_readable($absolutePath)) {
+                continue;
+            }
+            $attachments[] = [
+                'filename' => (string)($row['nome_arquivo'] ?? basename($absolutePath)),
+                'mime_type' => (string)($row['mime_type'] ?? 'application/octet-stream'),
+                'content' => file_get_contents($absolutePath),
+            ];
+        }
+        $stmt->close();
+        return $attachments;
+    }
+}
+
+if (!function_exists('proto_send_document_emails')) {
     function proto_send_document_emails(mysqli $conn, int $documentoId, int $criadoPor, array $destinos): array
     {
         if ($documentoId <= 0 || $criadoPor <= 0) {
@@ -242,6 +270,7 @@ if (!function_exists('proto_send_document_emails')) {
             : $tipoNome . ' - ' . $assuntoDocumento;
         $from = proto_mail_sender_email();
         $pdf = proto_generate_document_pdf($conn, $documentoId);
+        $attachments = array_merge([$pdf], proto_collect_email_attachments($conn, $documentoId));
 
         $destinatarios = proto_collect_document_emails($conn, $destinos);
         if (empty($destinatarios)) {
@@ -287,13 +316,17 @@ if (!function_exists('proto_send_document_emails')) {
             $body = "--{$boundary}\r\n"
                 . "Content-Type: text/html; charset=UTF-8\r\n"
                 . "Content-Transfer-Encoding: 8bit\r\n\r\n"
-                . $message . "\r\n\r\n"
-                . "--{$boundary}\r\n"
-                . "Content-Type: application/pdf; name=\"" . addslashes($pdf['filename']) . "\"\r\n"
-                . "Content-Transfer-Encoding: base64\r\n"
-                . "Content-Disposition: attachment; filename=\"" . addslashes($pdf['filename']) . "\"\r\n\r\n"
-                . chunk_split(base64_encode($pdf['content'])) . "\r\n"
-                . "--{$boundary}--";
+                . $message . "\r\n\r\n";
+
+            foreach ($attachments as $attachment) {
+                $body .= "--{$boundary}\r\n"
+                    . "Content-Type: " . ($attachment['mime_type'] ?: 'application/octet-stream') . "; name=\"" . addslashes($attachment['filename']) . "\"\r\n"
+                    . "Content-Transfer-Encoding: base64\r\n"
+                    . "Content-Disposition: attachment; filename=\"" . addslashes($attachment['filename']) . "\"\r\n\r\n"
+                    . chunk_split(base64_encode((string)$attachment['content'])) . "\r\n";
+            }
+
+            $body .= "--{$boundary}--";
 
             if (@mail($email, '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headerString)) {
                 $sent++;
