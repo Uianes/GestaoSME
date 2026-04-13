@@ -343,7 +343,7 @@ $statusClasses = [
                     <a class="btn btn-sm btn-outline-secondary" href="print.php?doc=<?= (int)$documento['id'] ?>" target="_blank">Imprimir</a>
                     <a class="btn btn-sm btn-outline-primary" href="pdf.php?doc=<?= (int)$documento['id'] ?>" target="_blank">Baixar PDF</a>
                   <?php endif; ?>
-                  <?php if ((int)$documento['criado_por'] === $matricula): ?>
+                  <?php if ($userIsAdmin || (int)$documento['criado_por'] === $matricula): ?>
                     <?php
                       $destUsuariosIds = [];
                       $destUnidadesIds = [];
@@ -874,18 +874,70 @@ $statusClasses = [
       height: 360,
       menubar: false,
       branding: false,
-      plugins: 'lists link image table code',
-      toolbar: 'undo redo | blocks fontsize | bold italic underline | alignleft aligncenter alignright | bullist numlist | table | link image | code',
+      plugins: 'paste lists link image table code',
+      toolbar: 'undo redo | customPaste customCopy | blocks fontsize | bold italic underline | alignleft aligncenter alignright alignjustify | bullist numlist | firstLineIndent | table | link image | code',
       toolbar_mode: 'wrap',
       toolbar_groups: {
         format: { icon: 'bold', tooltip: 'Formatação' }
       },
-      toolbar1: 'undo redo | blocks fontsize | bold italic underline | alignleft aligncenter alignright',
-      toolbar2: 'bullist numlist | table | link image | code',
+      toolbar1: 'undo redo | customPaste customCopy | blocks fontsize | bold italic underline | alignleft aligncenter alignright alignjustify',
+      toolbar2: 'bullist numlist | firstLineIndent | table | link image | code',
       statusbar: false,
       image_title: true,
       automatic_uploads: false,
       font_size_formats: '8pt 9pt 10pt 11pt 12pt 14pt 16pt 18pt 20pt 24pt 28pt 32pt',
+      paste_as_text: false,
+      formats: {
+        firstLineIndent: { selector: 'p', styles: { 'text-indent': '2em' } }
+      },
+      setup: (editor) => {
+        editor.ui.registry.addButton('customPaste', {
+          text: 'Colar',
+          tooltip: 'Colar do clipboard',
+          onAction: async () => {
+            try {
+              if (navigator.clipboard && window.isSecureContext) {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                  editor.insertContent(text.replace(/\n/g, '<br>'));
+                  return;
+                }
+              }
+              editor.windowManager.alert('Use Ctrl+V dentro do editor se o navegador bloquear o acesso ao clipboard.');
+            } catch (error) {
+              editor.windowManager.alert('O navegador bloqueou a colagem direta. Use Ctrl+V dentro do editor.');
+            }
+          }
+        });
+
+        editor.ui.registry.addButton('customCopy', {
+          text: 'Copiar',
+          tooltip: 'Copiar seleção do editor',
+          onAction: async () => {
+            const selectedText = editor.selection.getContent({ format: 'text' }) || editor.getContent({ format: 'text' });
+            if (!selectedText.trim()) {
+              editor.windowManager.alert('Não há conteúdo para copiar.');
+              return;
+            }
+            try {
+              if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(selectedText);
+                return;
+              }
+              document.execCommand('copy');
+            } catch (error) {
+              editor.windowManager.alert('O navegador bloqueou a cópia direta.');
+            }
+          }
+        });
+
+        editor.ui.registry.addToggleButton('firstLineIndent', {
+          text: 'Recuo',
+          tooltip: 'Adicionar ou remover recuo no início do parágrafo',
+          onAction: () => editor.formatter.toggle('firstLineIndent'),
+          onSetup: (api) => editor.formatter.formatChanged('firstLineIndent', (state) => api.setActive(state))
+        });
+      },
       images_upload_handler: (blobInfo, progress) => new Promise((resolve) => {
         const base64 = 'data:' + blobInfo.blob().type + ';base64,' + blobInfo.base64();
         resolve(base64);

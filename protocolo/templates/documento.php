@@ -101,6 +101,13 @@ if (strpos($tipoLower, 'memorando') !== false) {
     .recebido { text-align: center; }
     .recebido .linha-rec { border-top: 1px solid #000; margin-top: 32px; padding-top: 6px; }
     .meta { margin-top: 18px; margin-bottom: 22px; }
+    .meta div { margin-bottom: 8px; }
+    .meta div:last-child { margin-bottom: 0; }
+    .meta .meta-assunto {
+      margin-top: 16px;
+      font-weight: 700;
+      text-align: justify;
+    }
   </style>
 </head>
 <body>
@@ -140,7 +147,7 @@ if (strpos($tipoLower, 'memorando') !== false) {
   <div class="meta">
     <div><strong>De:</strong> <?= h($de) ?></div>
     <div><strong>Para:</strong> <?= h(implode(', ', $para)) ?></div>
-    <div><strong>Assunto:</strong> <?= h($assunto) ?></div>
+    <div class="meta-assunto"><strong>Assunto:</strong> <?= h($assunto) ?></div>
   </div>
 
   <div class="body">

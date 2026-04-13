@@ -327,24 +327,7 @@ if ($canManage && $hasAlunos && $hasAlunoNome && $hasAlunoMatricula) {
         GROUP BY a.matricula
         ORDER BY nome
     ";
-
-    if ($userIsSme || !$canScopeBySchool || empty($userUnits)) {
-        $resAlunos = inclusao_run_query($conn, $sqlTodosAlunos);
-    } else {
-        $sqlAlunos = "
-            SELECT {$selectAlunoIdent} AS id, MAX(a.nome) AS nome, a.matricula
-            FROM alunos a
-            INNER JOIN turma_alunos ta ON ta.aluno_id = a.matricula
-            INNER JOIN turmas t ON t.id = ta.turma_id
-            WHERE t.id_escola IN (" . ph_list(count($userUnits)) . ")
-            GROUP BY a.matricula
-            ORDER BY nome
-        ";
-        $resAlunos = inclusao_run_query($conn, $sqlAlunos, $userUnits);
-        if (!$resAlunos instanceof mysqli_result || $resAlunos->num_rows === 0) {
-            $resAlunos = inclusao_run_query($conn, $sqlTodosAlunos);
-        }
-    }
+    $resAlunos = inclusao_run_query($conn, $sqlTodosAlunos);
     if ($resAlunos instanceof mysqli_result) {
         $alunosMap = [];
         while ($r = mysqli_fetch_assoc($resAlunos)) {

@@ -32,6 +32,7 @@ if ($matricula <= 0 || $documentoId <= 0 || $assunto === '') {
 }
 
 $conn = db();
+$userIsAdmin = user_is_admin();
 $groupsReady = proto_groups_schema_ready($conn);
 $destUsuarios = is_array($destUsuarios) ? array_values(array_unique(array_filter(array_map('intval', $destUsuarios), static fn($id) => $id > 0))) : [];
 $destUnidades = is_array($destUnidades) ? array_values(array_unique(array_filter(array_map('intval', $destUnidades), static fn($id) => $id > 0))) : [];
@@ -45,7 +46,7 @@ try {
     $doc = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 
-    if (!$doc || (int)$doc['criado_por'] !== $matricula) {
+    if (!$doc || (!$userIsAdmin && (int)$doc['criado_por'] !== $matricula)) {
         throw new RuntimeException('Sem permissão para editar este documento.');
     }
 
