@@ -51,6 +51,17 @@ function ph_list_pdf(int $count): string
     return implode(',', array_fill(0, $count, '?'));
 }
 
+function tipo_profissional_label_pdf(?string $tipo): string
+{
+    return match ((string)$tipo) {
+        'monitor' => 'Monitor',
+        'interprete_libras' => 'Intérprete de LIBRAS',
+        'cuidador' => 'Cuidador',
+        'outro' => 'Outro',
+        default => 'Monitor',
+    };
+}
+
 function cid_like_keys(string $cid): array
 {
     $cid = strtoupper(trim($cid));
@@ -106,6 +117,8 @@ $filterCid = trim((string)($_GET['cid'] ?? ''));
 $hasNomeMonitor = false;
 $hasMatriculaMonitorTexto = false;
 $hasMonitorMatricula = false;
+$hasAcompanhanteMatricula = false;
+$hasTipoAcompanhamento = false;
 $hasParticipaAee = false;
 $resCols = $conn->query("SHOW COLUMNS FROM alunos_aee");
 if ($resCols) {
@@ -117,6 +130,10 @@ if ($resCols) {
             $hasMatriculaMonitorTexto = true;
         } elseif ($f === 'monitor_matricula') {
             $hasMonitorMatricula = true;
+        } elseif ($f === 'acompanhante_matricula') {
+            $hasAcompanhanteMatricula = true;
+        } elseif ($f === 'tipo_acompanhamento') {
+            $hasTipoAcompanhamento = true;
         } elseif ($f === 'participa_aee') {
             $hasParticipaAee = true;
         }
@@ -126,16 +143,31 @@ if ($resCols) {
 $monitorColumn = $hasNomeMonitor
     ? 'nome_monitor'
     : ($hasMatriculaMonitorTexto ? 'matricula_monitor' : ($hasMonitorMatricula ? 'monitor_matricula' : null));
+$professionalMatriculaColumn = $hasAcompanhanteMatricula
+    ? 'acompanhante_matricula'
+    : ($hasMonitorMatricula ? 'monitor_matricula' : null);
 
-if ($monitorColumn === 'monitor_matricula') {
+if ($professionalMatriculaColumn !== null) {
     $selectMonitor = ", um.nome AS monitor_nome";
-    $joinMonitor = "LEFT JOIN usuarios um ON um.matricula = aa.monitor_matricula";
+    $joinMonitor = "LEFT JOIN usuarios um ON um.matricula = aa.{$professionalMatriculaColumn}";
+    $selectTipoProfissional = $hasTipoAcompanhamento
+        ? ", aa.tipo_acompanhamento AS tipo_profissional"
+        : ", NULL AS tipo_profissional";
+    $joinTipoProfissional = "";
 } elseif ($monitorColumn !== null) {
     $selectMonitor = ", aa.`{$monitorColumn}` AS monitor_nome";
     $joinMonitor = "";
+    $selectTipoProfissional = $hasTipoAcompanhamento
+        ? ", aa.tipo_acompanhamento AS tipo_profissional"
+        : ", NULL AS tipo_profissional";
+    $joinTipoProfissional = "";
 } else {
     $selectMonitor = ", NULL AS monitor_nome";
     $joinMonitor = "";
+    $selectTipoProfissional = $hasTipoAcompanhamento
+        ? ", aa.tipo_acompanhamento AS tipo_profissional"
+        : ", NULL AS tipo_profissional";
+    $joinTipoProfissional = "";
 }
 
 $params = [];
@@ -171,10 +203,12 @@ $sql = "
         MAX(aa.participa_aee) AS participa_aee," : "
         0 AS participa_aee,") . "
         MAX(aa.monitor_exclusivo) AS monitor_exclusivo
+        {$selectTipoProfissional}
         {$selectMonitor}
     FROM alunos_aee aa
     LEFT JOIN alunos a ON a.matricula = aa.matricula_usuario
     {$joinMonitor}
+    {$joinTipoProfissional}
     LEFT JOIN turma_alunos ta ON ta.aluno_id = COALESCE(a.matricula, aa.matricula_usuario)
     LEFT JOIN turmas t ON t.id = ta.turma_id
     LEFT JOIN unidade un ON un.id_unidade = t.id_escola
@@ -184,8 +218,8 @@ $sql = "
     ORDER BY escola_nome ASC, aluno_nome ASC
 ";
 
-if ($monitorColumn !== null) {
-    if ($monitorColumn === 'monitor_matricula') {
+if ($monitorColumn !== null || $professionalMatriculaColumn !== null) {
+    if ($professionalMatriculaColumn !== null) {
         $sql = str_replace(
             ", um.nome AS monitor_nome",
             ", MAX(um.nome) AS monitor_nome",
@@ -212,14 +246,26 @@ $title = $reportType === 'geral'
     ? 'Relatorio AEE - SME por escola'
     : ($reportType === 'cid_like' ? 'Relatorio AEE - Agrupado por CID (similar)' : 'Relatorio AEE - Minha escola');
 
+$isWideReport = in_array($reportType, ['escola', 'geral'], true);
+$paperOrientation = $isWideReport ? 'landscape' : 'portrait';
+
 $html = '<!doctype html><html><head><meta charset="utf-8"><style>
-body{font-family:DejaVu Sans,sans-serif;font-size:12px;color:#222}
-h1{font-size:18px;margin:0 0 8px}
-h2{font-size:14px;margin:18px 0 6px}
-.meta{font-size:11px;color:#555;margin-bottom:10px}
-table{width:100%;border-collapse:collapse}
-th,td{border:1px solid #dcdcdc;padding:6px;vertical-align:top}
-th{background:#f3f3f3;text-align:left}
+@page{margin:20px 18px}
+body{font-family:DejaVu Sans,sans-serif;font-size:10px;color:#222}
+h1{font-size:16px;margin:0 0 8px}
+h2{font-size:12px;margin:16px 0 6px}
+.meta{font-size:10px;color:#555;margin-bottom:10px}
+table{width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:10px}
+th,td{border:1px solid #dcdcdc;padding:4px 5px;vertical-align:top;word-wrap:break-word;overflow-wrap:anywhere}
+th{background:#f3f3f3;text-align:left;font-size:9px}
+td{font-size:10px}
+.w-aluno{width:18%}
+.w-matricula{width:10%}
+.w-escola{width:16%}
+.w-cid{width:14%}
+.w-flag{width:7%}
+.w-tipo{width:10%}
+.w-profissional{width:18%}
 </style></head><body>';
 
 $html .= '<h1>' . h_pdf($title) . '</h1>';
@@ -247,13 +293,14 @@ if (empty($rows)) {
     ksort($byCid);
     foreach ($byCid as $cidKey => $items) {
         $html .= '<h2>' . h_pdf($cidKey) . ' (' . count($items) . ')</h2>';
-        $html .= '<table><thead><tr><th>Aluno</th><th>Matrícula</th><th>Escola</th><th>CID completo</th><th>Monitor</th></tr></thead><tbody>';
+        $html .= '<table><thead><tr><th class="w-aluno">Aluno</th><th class="w-matricula">Matrícula</th><th class="w-escola">Escola</th><th class="w-cid">CID completo</th><th class="w-tipo">Tipo</th><th class="w-profissional">Profissional</th></tr></thead><tbody>';
         foreach ($items as $r) {
             $html .= '<tr>'
                 . '<td>' . h_pdf($r['aluno_nome'] ?? '-') . '</td>'
                 . '<td>' . h_pdf($r['matricula_aluno'] ?? '-') . '</td>'
                 . '<td>' . h_pdf($r['escola_nome'] ?? '-') . '</td>'
                 . '<td>' . h_pdf($r['cid'] ?: '-') . '</td>'
+                . '<td>' . (((int)($r['monitor_exclusivo'] ?? 0) === 1) ? h_pdf(tipo_profissional_label_pdf($r['tipo_profissional'] ?? 'monitor')) : '-') . '</td>'
                 . '<td>' . h_pdf(($r['monitor_nome'] ?? '') !== '' ? $r['monitor_nome'] : '-') . '</td>'
                 . '</tr>';
         }
@@ -271,7 +318,7 @@ if (empty($rows)) {
 
     foreach ($bySchool as $school => $items) {
         $html .= '<h2>' . h_pdf($school) . '</h2>';
-        $html .= '<table><thead><tr><th>Aluno</th><th>Matrícula</th><th>CID</th><th>Diag.</th><th>Suspeita</th><th>TEAbraça</th><th>Atendimento AEE</th><th>Monitor</th></tr></thead><tbody>';
+        $html .= '<table><thead><tr><th class="w-aluno">Aluno</th><th class="w-matricula">Matrícula</th><th class="w-cid">CID</th><th class="w-flag">Diag.</th><th class="w-flag">Suspeita</th><th class="w-flag">TEAbraça</th><th class="w-flag">Atend. AEE</th><th class="w-tipo">Tipo</th><th class="w-profissional">Profissional</th></tr></thead><tbody>';
         foreach ($items as $r) {
             $html .= '<tr>'
                 . '<td>' . h_pdf($r['aluno_nome'] ?? '-') . '</td>'
@@ -281,13 +328,14 @@ if (empty($rows)) {
                 . '<td>' . ((int)$r['suspeita'] === 1 ? 'Sim' : 'Não') . '</td>'
                 . '<td>' . ((int)$r['frequenta_teabraca'] === 1 ? 'Sim' : 'Não') . '</td>'
                 . '<td>' . ((int)($r['participa_aee'] ?? 0) === 1 ? 'Sim' : 'Não') . '</td>'
+                . '<td>' . (((int)($r['monitor_exclusivo'] ?? 0) === 1) ? h_pdf(tipo_profissional_label_pdf($r['tipo_profissional'] ?? 'monitor')) : '-') . '</td>'
                 . '<td>' . h_pdf(($r['monitor_nome'] ?? '') !== '' ? $r['monitor_nome'] : '-') . '</td>'
                 . '</tr>';
         }
         $html .= '</tbody></table>';
     }
 } else {
-    $html .= '<table><thead><tr><th>Aluno</th><th>Matrícula</th><th>Escola</th><th>CID</th><th>Diag.</th><th>Suspeita</th><th>TEAbraça</th><th>Atendimento AEE</th><th>Monitor</th></tr></thead><tbody>';
+    $html .= '<table><thead><tr><th class="w-aluno">Aluno</th><th class="w-matricula">Matrícula</th><th class="w-escola">Escola</th><th class="w-cid">CID</th><th class="w-flag">Diag.</th><th class="w-flag">Suspeita</th><th class="w-flag">TEAbraça</th><th class="w-flag">Atend. AEE</th><th class="w-tipo">Tipo</th><th class="w-profissional">Profissional</th></tr></thead><tbody>';
     foreach ($rows as $r) {
         $html .= '<tr>'
             . '<td>' . h_pdf($r['aluno_nome'] ?? '-') . '</td>'
@@ -298,6 +346,7 @@ if (empty($rows)) {
             . '<td>' . ((int)$r['suspeita'] === 1 ? 'Sim' : 'Não') . '</td>'
             . '<td>' . ((int)$r['frequenta_teabraca'] === 1 ? 'Sim' : 'Não') . '</td>'
             . '<td>' . ((int)($r['participa_aee'] ?? 0) === 1 ? 'Sim' : 'Não') . '</td>'
+            . '<td>' . (((int)($r['monitor_exclusivo'] ?? 0) === 1) ? h_pdf(tipo_profissional_label_pdf($r['tipo_profissional'] ?? 'monitor')) : '-') . '</td>'
             . '<td>' . h_pdf(($r['monitor_nome'] ?? '') !== '' ? $r['monitor_nome'] : '-') . '</td>'
             . '</tr>';
     }
@@ -307,7 +356,7 @@ if (empty($rows)) {
 $html .= '</body></html>';
 
 $dompdf = new Dompdf(['isRemoteEnabled' => true]);
-$dompdf->setPaper('A4', 'portrait');
+$dompdf->setPaper('A4', $paperOrientation);
 $dompdf->loadHtml($html, 'UTF-8');
 $dompdf->render();
 
