@@ -62,6 +62,15 @@ function inclusao_tipo_profissional_label(?string $tipo): string
     };
 }
 
+function inclusao_join_values(array $values): string
+{
+    $values = array_values(array_filter(array_map(static function ($value): string {
+        return trim((string)$value);
+    }, $values), static fn(string $value): bool => $value !== '' && $value !== '-'));
+
+    return $values !== [] ? implode(' / ', $values) : '-';
+}
+
 function inclusao_allowed_laudo_extensions(): array
 {
     return [
@@ -214,7 +223,9 @@ $hasNomeMonitor = $hasAee && column_exists_inclusao($conn, 'alunos_aee', 'nome_m
 $hasMatriculaMonitorTexto = $hasAee && column_exists_inclusao($conn, 'alunos_aee', 'matricula_monitor');
 $hasMonitorMatricula = $hasAee && column_exists_inclusao($conn, 'alunos_aee', 'monitor_matricula');
 $hasAcompanhanteMatricula = $hasAee && column_exists_inclusao($conn, 'alunos_aee', 'acompanhante_matricula');
+$hasAcompanhanteMatricula2 = $hasAee && column_exists_inclusao($conn, 'alunos_aee', 'acompanhante_matricula_2');
 $hasTipoAcompanhamento = $hasAee && column_exists_inclusao($conn, 'alunos_aee', 'tipo_acompanhamento');
+$hasTipoAcompanhamento2 = $hasAee && column_exists_inclusao($conn, 'alunos_aee', 'tipo_acompanhamento_2');
 $hasParticipaAee = $hasAee && column_exists_inclusao($conn, 'alunos_aee', 'participa_aee');
 $hasCidEmitidoPor = $hasAee && column_exists_inclusao($conn, 'alunos_aee', 'cid_emitido_por');
 $hasCidEmitidoPorOutro = $hasAee && column_exists_inclusao($conn, 'alunos_aee', 'cid_emitido_por_outro');
@@ -296,7 +307,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasAee && $schemaOk) {
         $participaAee = isset($_POST['participa_aee']) ? 1 : 0;
         $monitorExclusivo = isset($_POST['monitor_exclusivo']) ? 1 : 0;
         $monitorRef = trim((string)($_POST['monitor_ref'] ?? ''));
+        $monitorRef2 = trim((string)($_POST['monitor_ref_2'] ?? ''));
         $tipoProfissional = trim((string)($_POST['tipo_profissional'] ?? 'monitor'));
+        $tipoProfissional2 = trim((string)($_POST['tipo_profissional_2'] ?? 'monitor'));
         $cidEmitidoPor = trim((string)($_POST['cid_emitido_por'] ?? ''));
         $cidEmitidoPorOutro = trim((string)($_POST['cid_emitido_por_outro'] ?? ''));
         $terapiaPostoSaude = isset($_POST['terapia_posto_saude']) ? 1 : 0;
@@ -306,9 +319,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasAee && $schemaOk) {
         $usaMedicacao = trim((string)($_POST['usa_medicacao'] ?? ''));
         $removeLaudo = isset($_POST['remove_laudo']) ? 1 : 0;
         $monitorDbValue = null;
+        $monitorDbValue2 = null;
         $modalMode = $id > 0 ? 'edit' : 'create';
         $modalOpen = $action === 'save';
         $formData = $_POST;
+
+        if ($monitorRef !== '' || $monitorRef2 !== '') {
+            $monitorExclusivo = 1;
+            $formData['monitor_exclusivo'] = '1';
+        }
 
         if ($action === 'delete') {
             if ($id <= 0) {
@@ -335,18 +354,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasAee && $schemaOk) {
                 $monitorDbValue = $monitorRef;
             }
         }
+        if ($professionalMatriculaColumn !== null && $monitorExclusivo === 1 && $monitorRef2 !== '') {
+            $monitorDbValue2 = ctype_digit($monitorRef2) ? (int)$monitorRef2 : null;
+        }
 
         if ($alunoIdRaw === '') {
             $errors[] = 'Selecione o aluno.';
         }
-        if ($hasMonitorField && $monitorExclusivo === 1 && $monitorRef === '') {
-            $errors[] = 'Selecione o usuário monitor.';
+        if ($hasMonitorField && $monitorExclusivo === 1 && $monitorRef === '' && $monitorRef2 === '') {
+            $errors[] = 'Selecione ao menos um profissional de apoio.';
         }
-        if ($hasMonitorField && $monitorExclusivo === 1 && $professionalMatriculaColumn !== null && $monitorDbValue === null) {
+        if ($hasMonitorField && $monitorExclusivo === 1 && $professionalMatriculaColumn !== null && $monitorRef !== '' && $monitorDbValue === null) {
             $errors[] = 'Monitor inválido.';
+        }
+        if ($professionalMatriculaColumn !== null && $monitorExclusivo === 1 && $monitorRef2 !== '' && $monitorDbValue2 === null) {
+            $errors[] = 'Segundo profissional inválido.';
         }
         if ($monitorExclusivo === 1 && !in_array($tipoProfissional, $allowedTiposProfissional, true)) {
             $errors[] = 'Selecione um tipo de profissional válido.';
+        }
+        if ($monitorExclusivo === 1 && $monitorRef2 !== '' && !in_array($tipoProfissional2, $allowedTiposProfissional, true)) {
+            $errors[] = 'Selecione um tipo válido para o segundo profissional.';
+        }
+        if (
+            $monitorExclusivo === 1
+            && $professionalMatriculaColumn !== null
+            && $monitorDbValue !== null
+            && $monitorDbValue2 !== null
+            && $monitorDbValue === $monitorDbValue2
+        ) {
+            $errors[] = 'Selecione profissionais diferentes para os dois apoios.';
         }
         if ($cidEmitidoPor !== '' && !in_array($cidEmitidoPor, $allowedCidEmitidoPor, true)) {
             $errors[] = 'Seleção inválida em emissor do CID.';
@@ -403,6 +440,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasAee && $schemaOk) {
                 if ($hasTipoAcompanhamento) {
                     $fields['tipo_acompanhamento'] = $monitorExclusivo === 1 ? $tipoProfissional : null;
                 }
+                if ($hasAcompanhanteMatricula2) {
+                    $fields['acompanhante_matricula_2'] = $monitorExclusivo === 1 ? $monitorDbValue2 : null;
+                }
+                if ($hasTipoAcompanhamento2) {
+                    $fields['tipo_acompanhamento_2'] = $monitorExclusivo === 1 && $monitorDbValue2 !== null ? $tipoProfissional2 : null;
+                }
                 if ($hasMonitorField) {
                     if ($professionalMatriculaColumn === null) {
                         $fields[$monitorColumn] = $monitorExclusivo === 1 ? $monitorDbValue : null;
@@ -454,13 +497,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasAee && $schemaOk) {
                     }
                     $params[] = $id;
                     $sqlUpdate = "UPDATE alunos_aee SET " . implode(', ', $setParts) . " WHERE id = ?";
-                    mysqli_execute_query($conn, $sqlUpdate, $params);
+                    $updated = mysqli_execute_query($conn, $sqlUpdate, $params);
+                    if ($updated === false) {
+                        throw new RuntimeException('Falha ao atualizar o registro: ' . $conn->error);
+                    }
                     $notice = 'Registro atualizado com sucesso.';
                 } else {
                     $columns = array_keys($fields);
                     $params = array_values($fields);
                     $sqlInsert = "INSERT INTO alunos_aee (" . implode(', ', $columns) . ") VALUES (" . ph_list(count($columns)) . ")";
-                    mysqli_execute_query($conn, $sqlInsert, $params);
+                    $inserted = mysqli_execute_query($conn, $sqlInsert, $params);
+                    if ($inserted === false) {
+                        throw new RuntimeException('Falha ao criar o registro: ' . $conn->error);
+                    }
                     $registroId = (int)$conn->insert_id;
                     $notice = 'Registro criado com sucesso.';
                 }
@@ -468,17 +517,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasAee && $schemaOk) {
                 $laudoAtual = $hasLaudoSchema ? inclusao_fetch_laudo_atual($conn, $registroId) : null;
                 if ($hasLaudoSchema && $removeLaudo === 1 && empty($_FILES['laudo_arquivo']['name'] ?? '')) {
                     inclusao_remove_laudo_path((string)($laudoAtual['laudo_caminho'] ?? ''));
-                    inclusao_run_query(
+                    $removedLaudo = inclusao_run_query(
                         $conn,
                         'UPDATE alunos_aee SET laudo_caminho = NULL, laudo_nome_original = NULL, laudo_mime = NULL WHERE id = ?',
                         [$registroId]
                     );
+                    if ($removedLaudo === false) {
+                        throw new RuntimeException('Falha ao remover o laudo atual: ' . $conn->error);
+                    }
                 }
                 if ($hasLaudoSchema && isset($_FILES['laudo_arquivo'])) {
                     $laudoData = inclusao_store_laudo($registroId, $_FILES['laudo_arquivo']);
                     if ($laudoData !== []) {
                         inclusao_remove_laudo_path((string)($laudoAtual['laudo_caminho'] ?? ''));
-                        inclusao_run_query(
+                        $updatedLaudo = inclusao_run_query(
                             $conn,
                             'UPDATE alunos_aee SET laudo_caminho = ?, laudo_nome_original = ?, laudo_mime = ? WHERE id = ?',
                             [
@@ -488,6 +540,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasAee && $schemaOk) {
                                 $registroId,
                             ]
                         );
+                        if ($updatedLaudo === false) {
+                            throw new RuntimeException('Falha ao salvar o laudo no registro: ' . $conn->error);
+                        }
                     }
                 }
                 $modalOpen = false;
@@ -563,15 +618,26 @@ if ($hasAee && $schemaOk) {
     $selectTipoProfissional = $hasTipoAcompanhamento
         ? ", aa.tipo_acompanhamento AS tipo_profissional"
         : ", NULL AS tipo_profissional";
+    $selectTipoProfissional2 = $hasTipoAcompanhamento2
+        ? ", aa.tipo_acompanhamento_2 AS tipo_profissional_2"
+        : ", NULL AS tipo_profissional_2";
 
     if ($professionalMatriculaColumn !== null) {
         $selectMonitor = ", aa.{$professionalMatriculaColumn} AS monitor_matricula, um.nome AS monitor_nome";
+        if ($hasAcompanhanteMatricula2) {
+            $selectMonitor .= ", aa.acompanhante_matricula_2 AS monitor_matricula_2, um2.nome AS monitor_nome_2";
+        } else {
+            $selectMonitor .= ", NULL AS monitor_matricula_2, NULL AS monitor_nome_2";
+        }
         $joinMonitor = "LEFT JOIN usuarios um ON um.matricula = aa.{$professionalMatriculaColumn}";
+        if ($hasAcompanhanteMatricula2) {
+            $joinMonitor .= "\n                LEFT JOIN usuarios um2 ON um2.matricula = aa.acompanhante_matricula_2";
+        }
     } elseif ($hasMonitorField) {
         $selectMonitor = ", aa.`{$monitorColumn}` AS monitor_nome";
         $joinMonitor = "";
     } else {
-        $selectMonitor = "";
+        $selectMonitor = ", NULL AS monitor_nome, NULL AS monitor_matricula_2, NULL AS monitor_nome_2";
         $joinMonitor = "";
     }
 
@@ -580,7 +646,8 @@ if ($hasAee && $schemaOk) {
             $sqlList = "
                 SELECT aa.*, COALESCE(a.matricula, aa.matricula_usuario) AS matricula_aluno, a.nome AS aluno_nome_base
                        {$selectMonitor}
-                       {$selectTipoProfissional},
+                       {$selectTipoProfissional}
+                       {$selectTipoProfissional2},
                        GROUP_CONCAT(DISTINCT un.nome ORDER BY un.nome SEPARATOR ', ') AS escola_nome
                 FROM alunos_aee aa
                 {$joinAlunos}
@@ -595,7 +662,8 @@ if ($hasAee && $schemaOk) {
             $sqlList = "
                 SELECT aa.*, COALESCE(a.matricula, aa.matricula_usuario) AS matricula_aluno, a.nome AS aluno_nome_base
                        {$selectMonitor}
-                       {$selectTipoProfissional},
+                       {$selectTipoProfissional}
+                       {$selectTipoProfissional2},
                        NULL AS escola_nome
                 FROM alunos_aee aa
                 {$joinAlunos}
@@ -608,7 +676,8 @@ if ($hasAee && $schemaOk) {
         $sqlList = "
             SELECT aa.*, COALESCE(a.matricula, aa.matricula_usuario) AS matricula_aluno, a.nome AS aluno_nome_base
                    {$selectMonitor}
-                   {$selectTipoProfissional},
+                   {$selectTipoProfissional}
+                   {$selectTipoProfissional2},
                    GROUP_CONCAT(DISTINCT un.nome ORDER BY un.nome SEPARATOR ', ') AS escola_nome
             FROM alunos_aee aa
             {$joinAlunos}
@@ -659,7 +728,9 @@ if (!$formData && $editRow) {
                 ? ($editRow['monitor_matricula'] ?? '')
                 : ($editRow[$monitorColumn] ?? ''))
         ),
+        'monitor_ref_2' => (string)($editRow['monitor_matricula_2'] ?? ($editRow['acompanhante_matricula_2'] ?? '')),
         'tipo_profissional' => (string)($editRow['tipo_profissional'] ?? ($editRow['tipo_acompanhamento'] ?? 'monitor')),
+        'tipo_profissional_2' => (string)($editRow['tipo_profissional_2'] ?? ($editRow['tipo_acompanhamento_2'] ?? 'monitor')),
         'cid_emitido_por' => (string)($editRow['cid_emitido_por'] ?? ''),
         'cid_emitido_por_outro' => (string)($editRow['cid_emitido_por_outro'] ?? ''),
         'terapia_posto_saude' => (int)($editRow['terapia_posto_saude'] ?? 0) === 1 ? '1' : '',
@@ -763,6 +834,14 @@ $pdfCidLikeQuery = http_build_query(array_merge(['type' => 'cid_like'], $pdfPara
                 ADD COLUMN acompanhante_matricula INT(11) NULL;</code>
         </div>
     <?php endif; ?>
+    <?php if (!$hasTipoAcompanhamento2 || !$hasAcompanhanteMatricula2): ?>
+        <div class="alert alert-info">
+            Para cadastrar um segundo profissional de apoio no mesmo aluno, adicione as colunas:
+            <code>ALTER TABLE alunos_aee
+                ADD COLUMN tipo_acompanhamento_2 VARCHAR(30) NULL,
+                ADD COLUMN acompanhante_matricula_2 INT(11) NULL;</code>
+        </div>
+    <?php endif; ?>
     <?php if (!$hasLaudoSchema): ?>
         <div class="alert alert-info">
             Para anexar o laudo do aluno, adicione as colunas:
@@ -845,7 +924,7 @@ $pdfCidLikeQuery = http_build_query(array_merge(['type' => 'cid_like'], $pdfPara
                                     </button>
                                 </th>
                                 <th>Tipo</th>
-                                <?php if ($hasMonitorField): ?><th>Usuário monitor</th><?php endif; ?>
+                                <?php if ($hasMonitorField): ?><th>Profissionais</th><?php endif; ?>
                                 <?php if ($hasLaudoSchema): ?><th>Laudo</th><?php endif; ?>
                                 <?php if ($canManage): ?><th>Ações</th><?php endif; ?>
                             </tr>
@@ -872,9 +951,23 @@ $pdfCidLikeQuery = http_build_query(array_merge(['type' => 'cid_like'], $pdfPara
                                         <td><?= (int)($row['participa_aee'] ?? 0) === 1 ? 'Sim' : 'Não' ?></td>
                                     <?php endif; ?>
                                     <td><?= (int)$row['monitor_exclusivo'] === 1 ? 'Sim' : 'Não' ?></td>
-                                    <td><?= (int)$row['monitor_exclusivo'] === 1 ? h_inclusao(inclusao_tipo_profissional_label($row['tipo_profissional'] ?? 'monitor')) : '-' ?></td>
+                                    <td><?=
+                                        (int)$row['monitor_exclusivo'] === 1
+                                            ? h_inclusao(inclusao_join_values([
+                                                !empty($row['monitor_nome'] ?? '')
+                                                    ? inclusao_tipo_profissional_label($row['tipo_profissional'] ?? 'monitor')
+                                                    : '',
+                                                !empty($row['monitor_nome_2'] ?? '') || !empty($row['monitor_matricula_2'] ?? '')
+                                                    ? inclusao_tipo_profissional_label($row['tipo_profissional_2'] ?? 'monitor')
+                                                    : '',
+                                            ]))
+                                            : '-'
+                                    ?></td>
                                     <?php if ($hasMonitorField): ?>
-                                        <td><?= h_inclusao(($row['monitor_nome'] ?? '') !== '' ? $row['monitor_nome'] : '-') ?></td>
+                                        <td><?= h_inclusao(inclusao_join_values([
+                                            ($row['monitor_nome'] ?? '') !== '' ? $row['monitor_nome'] : '',
+                                            ($row['monitor_nome_2'] ?? '') !== '' ? $row['monitor_nome_2'] : '',
+                                        ])) ?></td>
                                     <?php endif; ?>
                                     <?php if ($hasLaudoSchema): ?>
                                         <td>
@@ -902,7 +995,9 @@ $pdfCidLikeQuery = http_build_query(array_merge(['type' => 'cid_like'], $pdfPara
                                                     data-participa-aee="<?= (int)($row['participa_aee'] ?? 0) === 1 ? '1' : '0' ?>"
                                                     data-monitor-exclusivo="<?= (int)($row['monitor_exclusivo'] ?? 0) === 1 ? '1' : '0' ?>"
                                                     data-monitor-ref="<?= h_inclusao((string)($hasMonitorField ? ($professionalMatriculaColumn !== null ? ($row[$professionalMatriculaColumn] ?? '') : ($row[$monitorColumn] ?? '')) : '')) ?>"
+                                                    data-monitor-ref-2="<?= h_inclusao((string)($row['monitor_matricula_2'] ?? '')) ?>"
                                                     data-tipo-profissional="<?= h_inclusao((string)($row['tipo_profissional'] ?? 'monitor')) ?>"
+                                                    data-tipo-profissional-2="<?= h_inclusao((string)($row['tipo_profissional_2'] ?? 'monitor')) ?>"
                                                     data-cid-emitido-por="<?= h_inclusao((string)($row['cid_emitido_por'] ?? '')) ?>"
                                                     data-cid-emitido-por-outro="<?= h_inclusao((string)($row['cid_emitido_por_outro'] ?? '')) ?>"
                                                     data-terapia-posto-saude="<?= (int)($row['terapia_posto_saude'] ?? 0) === 1 ? '1' : '0' ?>"
@@ -1002,7 +1097,7 @@ $pdfCidLikeQuery = http_build_query(array_merge(['type' => 'cid_like'], $pdfPara
                             </div>
                             <?php if ($hasMonitorField): ?>
                                 <div class="col-12 col-md-6">
-                                    <label class="form-label" for="aee-monitor-ref">Nome do monitor</label>
+                                    <label class="form-label" for="aee-monitor-ref">Profissional de apoio 1</label>
                                     <select class="form-select" name="monitor_ref" id="aee-monitor-ref">
                                         <option value="">Selecione</option>
                                         <?php foreach ($monitoresSelect as $m): ?>
@@ -1014,7 +1109,7 @@ $pdfCidLikeQuery = http_build_query(array_merge(['type' => 'cid_like'], $pdfPara
                                     </select>
                                 </div>
                                 <div class="col-12 col-md-6">
-                                    <label class="form-label" for="aee-tipo-profissional">Tipo do profissional</label>
+                                    <label class="form-label" for="aee-tipo-profissional">Tipo do apoio 1</label>
                                     <select class="form-select" name="tipo_profissional" id="aee-tipo-profissional">
                                         <option value="monitor" <?= (($formData['tipo_profissional'] ?? 'monitor') === 'monitor') ? 'selected' : '' ?>>Monitor</option>
                                         <option value="interprete_libras" <?= (($formData['tipo_profissional'] ?? '') === 'interprete_libras') ? 'selected' : '' ?>>Intérprete de LIBRAS</option>
@@ -1022,6 +1117,31 @@ $pdfCidLikeQuery = http_build_query(array_merge(['type' => 'cid_like'], $pdfPara
                                         <option value="outro" <?= (($formData['tipo_profissional'] ?? '') === 'outro') ? 'selected' : '' ?>>Outro</option>
                                     </select>
                                 </div>
+                                <?php if ($hasAcompanhanteMatricula2): ?>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="aee-monitor-ref-2">Profissional de apoio 2</label>
+                                        <select class="form-select" name="monitor_ref_2" id="aee-monitor-ref-2">
+                                            <option value="">Selecione</option>
+                                            <?php foreach ($monitoresSelect as $m): ?>
+                                                <?php $valorMonitor2 = (string)(int)$m['matricula']; ?>
+                                                <option value="<?= h_inclusao($valorMonitor2) ?>" <?= ((string)($formData['monitor_ref_2'] ?? '') === $valorMonitor2) ? 'selected' : '' ?>>
+                                                    <?= h_inclusao($m['nome']) ?> (<?= (int)$m['matricula'] ?>)
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                <?php endif; ?>
+                                <?php if ($hasTipoAcompanhamento2): ?>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="aee-tipo-profissional-2">Tipo do apoio 2</label>
+                                        <select class="form-select" name="tipo_profissional_2" id="aee-tipo-profissional-2">
+                                            <option value="monitor" <?= (($formData['tipo_profissional_2'] ?? 'monitor') === 'monitor') ? 'selected' : '' ?>>Monitor</option>
+                                            <option value="interprete_libras" <?= (($formData['tipo_profissional_2'] ?? '') === 'interprete_libras') ? 'selected' : '' ?>>Intérprete de LIBRAS</option>
+                                            <option value="cuidador" <?= (($formData['tipo_profissional_2'] ?? '') === 'cuidador') ? 'selected' : '' ?>>Cuidador</option>
+                                            <option value="outro" <?= (($formData['tipo_profissional_2'] ?? '') === 'outro') ? 'selected' : '' ?>>Outro</option>
+                                        </select>
+                                    </div>
+                                <?php endif; ?>
                             <?php endif; ?>
                             <?php if ($hasLaudoSchema): ?>
                                 <div class="col-12"><hr class="my-1"></div>
@@ -1207,7 +1327,9 @@ document.addEventListener('DOMContentLoaded', function () {
         participa_aee: false,
         monitor_exclusivo: false,
         monitor_ref: '',
+        monitor_ref_2: '',
         tipo_profissional: 'monitor',
+        tipo_profissional_2: 'monitor',
         cid_emitido_por: '',
         cid_emitido_por_outro: '',
         terapia_posto_saude: false,
@@ -1237,7 +1359,9 @@ document.addEventListener('DOMContentLoaded', function () {
         setValue('aee-cid', state.cid || '');
         setValue('aee-descricao', state.descricao_outro || '');
         setValue('aee-monitor-ref', state.monitor_ref || '');
+        setValue('aee-monitor-ref-2', state.monitor_ref_2 || '');
         setValue('aee-tipo-profissional', state.tipo_profissional || 'monitor');
+        setValue('aee-tipo-profissional-2', state.tipo_profissional_2 || 'monitor');
         setValue('aee-cid-emitido-por', state.cid_emitido_por || '');
         setValue('aee-cid-emitido-por-outro', state.cid_emitido_por_outro || '');
         setValue('aee-usa-medicacao', state.usa_medicacao || '');
@@ -1253,13 +1377,36 @@ document.addEventListener('DOMContentLoaded', function () {
         setChecked('aee-remove-laudo', state.remove_laudo);
     }
 
+    function syncMonitorExclusivo() {
+        const field = document.getElementById('aee-monitor-exclusivo');
+        const monitor1 = document.getElementById('aee-monitor-ref');
+        const monitor2 = document.getElementById('aee-monitor-ref-2');
+        if (!field) {
+            return;
+        }
+        const hasMonitor1 = !!(monitor1 && monitor1.value);
+        const hasMonitor2 = !!(monitor2 && monitor2.value);
+        if (hasMonitor1 || hasMonitor2) {
+            field.checked = true;
+        }
+    }
+
     const createButton = document.querySelector('[data-aee-open-create]');
     if (createButton) {
         createButton.addEventListener('click', function () {
             fillModal({}, 'create');
+            syncMonitorExclusivo();
             aeeModal.show();
         });
     }
+
+    ['aee-monitor-ref', 'aee-monitor-ref-2'].forEach(function (id) {
+        const field = document.getElementById(id);
+        if (!field) {
+            return;
+        }
+        field.addEventListener('change', syncMonitorExclusivo);
+    });
 
     document.querySelectorAll('[data-aee-open-edit]').forEach(function (button) {
         button.addEventListener('click', function () {
@@ -1274,7 +1421,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 participa_aee: button.dataset.participaAee === '1',
                 monitor_exclusivo: button.dataset.monitorExclusivo === '1',
                 monitor_ref: button.dataset.monitorRef || '',
+                monitor_ref_2: button.dataset.monitorRef2 || '',
                 tipo_profissional: button.dataset.tipoProfissional || 'monitor',
+                tipo_profissional_2: button.dataset.tipoProfissional2 || 'monitor',
                 cid_emitido_por: button.dataset.cidEmitidoPor || '',
                 cid_emitido_por_outro: button.dataset.cidEmitidoPorOutro || '',
                 terapia_posto_saude: button.dataset.terapiaPostoSaude === '1',
@@ -1284,6 +1433,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 remove_laudo: false,
                 usa_medicacao: button.dataset.usaMedicacao || ''
             }, 'edit');
+            syncMonitorExclusivo();
             aeeModal.show();
         });
     });
@@ -1300,7 +1450,9 @@ document.addEventListener('DOMContentLoaded', function () {
             participa_aee: <?= !empty($formData['participa_aee']) ? 'true' : 'false' ?>,
             monitor_exclusivo: <?= !empty($formData['monitor_exclusivo']) ? 'true' : 'false' ?>,
             monitor_ref: <?= json_encode((string)($formData['monitor_ref'] ?? '')) ?>,
+            monitor_ref_2: <?= json_encode((string)($formData['monitor_ref_2'] ?? '')) ?>,
             tipo_profissional: <?= json_encode((string)($formData['tipo_profissional'] ?? 'monitor')) ?>,
+            tipo_profissional_2: <?= json_encode((string)($formData['tipo_profissional_2'] ?? 'monitor')) ?>,
             cid_emitido_por: <?= json_encode((string)($formData['cid_emitido_por'] ?? '')) ?>,
             cid_emitido_por_outro: <?= json_encode((string)($formData['cid_emitido_por_outro'] ?? '')) ?>,
             terapia_posto_saude: <?= !empty($formData['terapia_posto_saude']) ? 'true' : 'false' ?>,
@@ -1310,6 +1462,7 @@ document.addEventListener('DOMContentLoaded', function () {
             remove_laudo: <?= !empty($formData['remove_laudo']) ? 'true' : 'false' ?>,
             usa_medicacao: <?= json_encode((string)($formData['usa_medicacao'] ?? '')) ?>
         }, <?= json_encode($modalMode) ?>);
+        syncMonitorExclusivo();
         aeeModal.show();
     <?php endif; ?>
 });

@@ -3,6 +3,7 @@ return [
   'home' => ['label' => 'Início', 'icon' => 'bi-house', 'href' => url('app.php')],
   'protocolo' => ['label' => 'Protocolo Eletrônico', 'icon' => 'bi-file-text-fill', 'href' => url('app.php?page=protocolo')],
   'documentos' => ['label' => 'Repositório de Documentos', 'icon' => 'bi-chat-left-text-fill', 'href' => url('app.php?page=documentos')],
+  'leis' => ['label' => 'Repositório de Leis', 'icon' => 'bi-bank2', 'href' => url('app.php?page=leis')],
   'assinatura' => ['label' => 'Assinatura Digital', 'icon' => 'bi-pencil-square', 'href' => url('app.php?page=assinatura')],
   'certificados' => ['label' => 'Certificados', 'icon' => 'bi-file-earmark-medical-fill', 'href' => url('app.php?page=certificados')],
   'atestados' => ['label' => 'Atestados', 'icon' => 'bi-file-earmark-post', 'href' => url('app.php?page=atestados')],

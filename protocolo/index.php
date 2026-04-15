@@ -342,6 +342,9 @@ $statusClasses = [
                   <?php if ($isModeloOficial): ?>
                     <a class="btn btn-sm btn-outline-secondary" href="print.php?doc=<?= (int)$documento['id'] ?>" target="_blank">Imprimir</a>
                     <a class="btn btn-sm btn-outline-primary" href="pdf.php?doc=<?= (int)$documento['id'] ?>" target="_blank">Baixar PDF</a>
+                    <?php if (!empty($anexos)): ?>
+                      <a class="btn btn-sm btn-outline-primary" href="anexos.php?doc=<?= (int)$documento['id'] ?>&auto=1" target="_blank">Baixar anexos</a>
+                    <?php endif; ?>
                   <?php endif; ?>
                   <?php if ($userIsAdmin || (int)$documento['criado_por'] === $matricula): ?>
                     <?php
@@ -472,7 +475,12 @@ $statusClasses = [
               </div>
 
               <div class="mb-3">
-                <div class="text-muted small">Anexos</div>
+                  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                  <div class="text-muted small">Anexos</div>
+                  <?php if (!empty($anexos)): ?>
+                    <a class="btn btn-sm btn-outline-primary" href="anexos.php?doc=<?= (int)$documento['id'] ?>&auto=1" target="_blank">Baixar anexos</a>
+                  <?php endif; ?>
+                </div>
                 <?php if (empty($anexos)): ?>
                   <div class="text-muted">Nenhum anexo.</div>
                 <?php else: ?>
@@ -596,6 +604,8 @@ $statusClasses = [
                         <option value="nomeacao">Memorando modelo para nomeação</option>
                         <option value="impacto">Memorando modelo para pedido de impacto</option>
                         <option value="folha">Memorando modelo de pagamento em folha</option>
+                        <option value="pericia_medica">Solicitação de Perícia Médica</option>
+                        <option value="altera_local_trabalho">Memorando GP para alteração de local de trabalho e centro de custo</option>
                       </select>
                     </div>
                     <textarea id="docConteudo" name="conteudo"></textarea>
@@ -875,12 +885,12 @@ $statusClasses = [
       menubar: false,
       branding: false,
       plugins: 'paste lists link image table code',
-      toolbar: 'undo redo | customPaste customCopy | blocks fontsize | bold italic underline | alignleft aligncenter alignright alignjustify | bullist numlist | firstLineIndent | table | link image | code',
+      toolbar: 'undo redo | customPaste customCopy | blocks fontsize | bold italic underline strikethrough | spacingDecrease spacingIncrease | alignleft aligncenter alignright alignjustify | bullist numlist | firstLineIndent | table | link image | code',
       toolbar_mode: 'wrap',
       toolbar_groups: {
         format: { icon: 'bold', tooltip: 'Formatação' }
       },
-      toolbar1: 'undo redo | customPaste customCopy | blocks fontsize | bold italic underline | alignleft aligncenter alignright alignjustify',
+      toolbar1: 'undo redo | customPaste customCopy | blocks fontsize | bold italic underline strikethrough | spacingDecrease spacingIncrease | alignleft aligncenter alignright alignjustify',
       toolbar2: 'bullist numlist | firstLineIndent | table | link image | code',
       statusbar: false,
       image_title: true,
@@ -891,6 +901,85 @@ $statusClasses = [
         firstLineIndent: { selector: 'p', styles: { 'text-indent': '2em' } }
       },
       setup: (editor) => {
+        const lineHeightSteps = ['1', '1.2', '1.4', '1.6', '1.8', '2'];
+        const defaultLineHeight = '1.6';
+
+        function normalizeLineHeight(value) {
+          const parsed = parseFloat(String(value || '').replace(',', '.'));
+          if (!Number.isFinite(parsed)) {
+            return defaultLineHeight;
+          }
+          return parsed.toFixed(1).replace(/\.0$/, '');
+        }
+
+        function resolveLineHeightTarget(node) {
+          const cell = editor.dom.getParent(node, 'td,th');
+          if (cell) {
+            return cell;
+          }
+
+          const block = editor.dom.getParent(node, 'p,div,li,blockquote,h1,h2,h3,h4,h5,h6');
+          if (block && block.nodeName !== 'BODY') {
+            return block;
+          }
+
+          return null;
+        }
+
+        function collectLineHeightTargets() {
+          const startNode = editor.selection.getStart();
+          const cell = editor.dom.getParent(startNode, 'td,th');
+          if (cell) {
+            return [cell];
+          }
+
+          const blocks = editor.selection.getSelectedBlocks()
+            .filter((block) => block && block.nodeName && block.nodeName !== 'BODY');
+          if (blocks.length > 0) {
+            return blocks;
+          }
+
+          const fallback = resolveLineHeightTarget(startNode);
+          return fallback ? [fallback] : [];
+        }
+
+        function currentLineHeight() {
+          const target = resolveLineHeightTarget(editor.selection.getStart());
+          if (!target) {
+            return defaultLineHeight;
+          }
+
+          const inlineValue = editor.dom.getStyle(target, 'line-height') || target.style.lineHeight;
+          if (inlineValue) {
+            return normalizeLineHeight(inlineValue);
+          }
+
+          return defaultLineHeight;
+        }
+
+        function updateLineHeight(step) {
+          const targets = collectLineHeightTargets();
+          if (targets.length === 0) {
+            return;
+          }
+
+          const active = currentLineHeight();
+          let index = lineHeightSteps.indexOf(active);
+          if (index === -1) {
+            const numeric = parseFloat(active);
+            index = lineHeightSteps.findIndex((item) => parseFloat(item) >= numeric);
+            if (index === -1) {
+              index = lineHeightSteps.length - 1;
+            }
+          }
+
+          const nextIndex = Math.min(lineHeightSteps.length - 1, Math.max(0, index + step));
+          const nextValue = lineHeightSteps[nextIndex];
+          targets.forEach((target) => {
+            editor.dom.setStyle(target, 'line-height', nextValue);
+          });
+        }
+
         editor.ui.registry.addButton('customPaste', {
           text: 'Colar',
           tooltip: 'Colar do clipboard',
@@ -937,12 +1026,24 @@ $statusClasses = [
           onAction: () => editor.formatter.toggle('firstLineIndent'),
           onSetup: (api) => editor.formatter.formatChanged('firstLineIndent', (state) => api.setActive(state))
         });
+
+        editor.ui.registry.addButton('spacingDecrease', {
+          text: 'Espaço-',
+          tooltip: 'Diminuir espaçamento vertical',
+          onAction: () => updateLineHeight(-1)
+        });
+
+        editor.ui.registry.addButton('spacingIncrease', {
+          text: 'Espaço+',
+          tooltip: 'Aumentar espaçamento vertical',
+          onAction: () => updateLineHeight(1)
+        });
       },
       images_upload_handler: (blobInfo, progress) => new Promise((resolve) => {
         const base64 = 'data:' + blobInfo.blob().type + ';base64,' + blobInfo.base64();
         resolve(base64);
       }),
-      content_style: 'body { font-family: "Segoe UI", sans-serif; font-size: 14px; } table { width: 100%; border-collapse: collapse; } td, th { border: 1px solid #94a3b8; padding: 6px 8px; }',
+      content_style: 'body { font-family: "Segoe UI", sans-serif; font-size: 14px; line-height: 1.6; } p, div, li, blockquote, h1, h2, h3, h4, h5, h6 { line-height: 1.6; } table { width: 100%; border-collapse: collapse; } td, th { border: 1px solid #94a3b8; padding: 6px 8px; line-height: 1.6; vertical-align: top; }',
     });
 
     document.getElementById('docForm').addEventListener('submit', () => {
@@ -1053,6 +1154,52 @@ $statusClasses = [
         <p>( ) Indeferido</p>
         <p>Nome do servidor que atendeu o pedido:</p>
         <p>Portaria solicitada em ____/____/______</p>
+      `,
+      pericia_medica: `
+        <p>Dirigimo-nos a Vossa Senhoria, a fim de solicitar perícia médica para o servidor(a) &lt;nome servidor&gt;, matrícula &lt;matricula&gt;, &lt;cargo&gt;, &lt;horas semanais&gt;, tendo em vista os recorrentes afastamentos do(a) mesmo(a).</p>
+        <p>Aguardamos o encaminhamento.</p>
+        <p>Atenciosas saudações,</p>
+      `,
+      altera_local_trabalho: `
+        <p>Informamos alteração de local de trabalho e de centro de custo, para os servidores abaixo mencionados:</p>
+        <table>
+          <tr>
+            <th>Matrícula</th>
+            <th>Servidor</th>
+            <th>Novo local de trabalho</th>
+            <th>Centro de custo</th>
+            <th>Início</th>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+        </table>
+        <p>Atenciosas saudações,</p>
       `
     };
 

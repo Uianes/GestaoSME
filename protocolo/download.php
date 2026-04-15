@@ -1,11 +1,12 @@
 <?php
+ob_start();
 require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/../auth/permissions.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/signature_helpers.php';
 
 require_login();
-if (!user_can_access_system('protocolo')) {
+if (!user_can_access_system('protocolo') && !user_can_access_system('documentos')) {
     http_response_code(403);
     echo 'Sem permissão de acesso.';
     exit;
@@ -118,16 +119,117 @@ $destinatarios = array_values(array_filter(array_unique($destinatarios)));
 $assinaturasInfo = proto_fetch_signed_signatures($conn, $docId);
 $validationUrl = proto_signature_validation_url();
 
+$stmt = $conn->prepare('SELECT nome_arquivo, mime_type, tamanho_bytes, caminho_storage FROM doc_anexos WHERE documento_id = ? ORDER BY enviado_em DESC');
+$stmt->bind_param('i', $docId);
+$stmt->execute();
+$anexos = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt->close();
+
 $unidadeOrigem = $documento['unidade_origem_nome'] ?? '';
-$logoSrc = file_exists(__DIR__ . '/../img/brasao-santo-augusto.png') ? '../img/brasao-santo-augusto.png' : '';
+$logoFile = __DIR__ . '/../img/brasao-santo-augusto.png';
+$logoSrc = '';
+if (file_exists($logoFile)) {
+    $imageData = base64_encode(file_get_contents($logoFile));
+    $logoSrc = 'data:image/png;base64,' . $imageData;
+}
 
 ob_start();
 require __DIR__ . '/templates/documento.php';
 $html = ob_get_clean();
 
-$autoPrint = !isset($_GET['auto']) || $_GET['auto'] !== '0';
-if ($autoPrint) {
-    $html = str_replace('</body>', "<script>window.addEventListener('load', function () { window.print(); });</script></body>", $html);
+require_once __DIR__ . '/../patrimonio/vendor/autoload.php';
+
+$dompdf = new Dompdf\Dompdf(['isRemoteEnabled' => true]);
+$dompdf->loadHtml($html, 'UTF-8');
+$dompdf->setPaper('A4', 'portrait');
+$dompdf->render();
+$pdfBinary = $dompdf->output();
+
+$tipoNome = $documento['tipo_nome'] ?? 'documento';
+$codigo = $numeracao['codigo_formatado'] ?? 'sem-numero';
+$safe = preg_replace('/[^A-Za-z0-9_-]+/', '-', strtolower($tipoNome . '-' . $codigo));
+$baseFilename = trim($safe, '-') !== '' ? trim($safe, '-') : ('documento-' . $docId);
+$pdfFilename = $baseFilename . '.pdf';
+
+$anexosExistentes = [];
+$baseDir = realpath(__DIR__ . '/../uploads/docs');
+foreach ($anexos as $anexo) {
+    $relativePath = trim((string)($anexo['caminho_storage'] ?? ''));
+    if ($relativePath === '') {
+        continue;
+    }
+    $fullPath = realpath(__DIR__ . '/../' . $relativePath);
+    if ($fullPath === false || $baseDir === false) {
+        continue;
+    }
+    if (strncmp($fullPath, $baseDir, strlen($baseDir)) !== 0 || !is_file($fullPath)) {
+        continue;
+    }
+    $anexosExistentes[] = [
+        'nome_arquivo' => (string)($anexo['nome_arquivo'] ?? basename($fullPath)),
+        'full_path' => $fullPath,
+    ];
 }
 
-echo $html;
+if ($anexosExistentes === []) {
+    if (ob_get_length()) {
+        ob_end_clean();
+    }
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: attachment; filename="' . $pdfFilename . '"');
+    echo $pdfBinary;
+    exit;
+}
+
+if (!class_exists('ZipArchive')) {
+    if (ob_get_length()) {
+        ob_end_clean();
+    }
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: attachment; filename="' . $pdfFilename . '"');
+    echo $pdfBinary;
+    exit;
+}
+
+$zipPath = tempnam(sys_get_temp_dir(), 'doc_zip_');
+if ($zipPath === false) {
+    if (ob_get_length()) {
+        ob_end_clean();
+    }
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: attachment; filename="' . $pdfFilename . '"');
+    echo $pdfBinary;
+    exit;
+}
+
+$zip = new ZipArchive();
+if ($zip->open($zipPath, ZipArchive::OVERWRITE) !== true) {
+    @unlink($zipPath);
+    if (ob_get_length()) {
+        ob_end_clean();
+    }
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: attachment; filename="' . $pdfFilename . '"');
+    echo $pdfBinary;
+    exit;
+}
+
+$zip->addFromString($pdfFilename, $pdfBinary);
+foreach ($anexosExistentes as $index => $anexo) {
+    $entryName = 'anexos/' . preg_replace('/[\\\\\\/]+/', '-', $anexo['nome_arquivo']);
+    if ($entryName === 'anexos/' || $entryName === 'anexos/-') {
+        $entryName = 'anexos/anexo-' . ($index + 1);
+    }
+    $zip->addFile($anexo['full_path'], $entryName);
+}
+$zip->close();
+
+if (ob_get_length()) {
+    ob_end_clean();
+}
+header('Content-Type: application/zip');
+header('Content-Length: ' . (string)filesize($zipPath));
+header('Content-Disposition: attachment; filename="' . $baseFilename . '.zip"');
+readfile($zipPath);
+@unlink($zipPath);
+exit;

@@ -42,7 +42,7 @@ $showComunicados = sa_has_visible_links(['documentos', 'calendario', 'comunicado
 $showOuvidoria = sa_has_visible_links(['ouvidoria', 'infraestrutura', 'suporte', 'votacoes'], $links);
 $showDashboard = sa_has_visible_links(['dashboards', 'avaliacoesExternas'], $links);
 $showGestao = sa_has_visible_links(['projetos', 'ppa', 'planejamento', 'planosGestao', 'justificativas', 'atestadosSaude', 'progressao', 'patrimonio', 'transporte'], $links);
-$showBiblioteca = sa_has_visible_links(['biblioteca', 'mooc'], $links);
+$showBiblioteca = sa_has_visible_links(['biblioteca', 'leis', 'mooc'], $links);
 $showPedagogico = sa_has_visible_links(['turmas', 'pareceres', 'frequencia', 'aee', 'alunos_inclusao', 'pme', 'horarios'], $links);
 ?>
 <div class="p-3">
@@ -211,6 +211,9 @@ $showPedagogico = sa_has_visible_links(['turmas', 'pareceres', 'frequencia', 'ae
         <div class="collapse show" id="wsBiblioteca">
           <ul class="list-unstyled sa-sub">
             <?php if (isset($links['biblioteca']) && ($link = sa_sidebar_link_or_null('biblioteca', $links['biblioteca'], $activePage))): ?>
+              <li class="sa-item"><?= $link ?></li>
+            <?php endif; ?>
+            <?php if (isset($links['leis']) && ($link = sa_sidebar_link_or_null('leis', $links['leis'], $activePage))): ?>
               <li class="sa-item"><?= $link ?></li>
             <?php endif; ?>
             <?php if (isset($links['mooc']) && ($link = sa_sidebar_link_or_null('mooc', $links['mooc'], $activePage))): ?>

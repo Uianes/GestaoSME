@@ -622,6 +622,9 @@ unset($queryBase['doc'], $queryBase['pagina']);
                             <a class="btn btn-sm btn-outline-secondary" href="<?= h_doc_repo(url('protocolo/index.php?doc=' . (int)$selectedDoc['id'])) ?>" target="_blank">Abrir no protocolo</a>
                             <a class="btn btn-sm btn-outline-primary" href="<?= h_doc_repo(url('protocolo/print.php?doc=' . (int)$selectedDoc['id'])) ?>" target="_blank">Visualizar impressão</a>
                             <a class="btn btn-sm btn-primary" href="<?= h_doc_repo(url('protocolo/pdf.php?doc=' . (int)$selectedDoc['id'])) ?>" target="_blank">Baixar PDF</a>
+                            <?php if (!empty($selectedAttachments)): ?>
+                                <a class="btn btn-sm btn-outline-primary" href="<?= h_doc_repo(url('protocolo/anexos.php?doc=' . (int)$selectedDoc['id'] . '&auto=1')) ?>" target="_blank">Baixar anexos</a>
+                            <?php endif; ?>
                         </div>
                     </div>
 
@@ -681,7 +684,12 @@ unset($queryBase['doc'], $queryBase['pagina']);
                     </div>
 
                     <div class="mb-4">
-                        <h5 class="mb-3">Anexos</h5>
+                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                            <h5 class="mb-0">Anexos</h5>
+                            <?php if (!empty($selectedAttachments)): ?>
+                                <a class="btn btn-sm btn-outline-primary" href="<?= h_doc_repo(url('protocolo/anexos.php?doc=' . (int)$selectedDoc['id'] . '&auto=1')) ?>" target="_blank">Baixar anexos</a>
+                            <?php endif; ?>
+                        </div>
                         <?php if (empty($selectedAttachments)): ?>
                             <div class="text-muted">Nenhum anexo vinculado.</div>
                         <?php else: ?>

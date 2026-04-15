@@ -62,6 +62,15 @@ function tipo_profissional_label_pdf(?string $tipo): string
     };
 }
 
+function join_values_pdf(array $values): string
+{
+    $values = array_values(array_filter(array_map(static function ($value): string {
+        return trim((string)$value);
+    }, $values), static fn(string $value): bool => $value !== '' && $value !== '-'));
+
+    return $values !== [] ? implode(' / ', $values) : '-';
+}
+
 function cid_like_keys(string $cid): array
 {
     $cid = strtoupper(trim($cid));
@@ -118,7 +127,9 @@ $hasNomeMonitor = false;
 $hasMatriculaMonitorTexto = false;
 $hasMonitorMatricula = false;
 $hasAcompanhanteMatricula = false;
+$hasAcompanhanteMatricula2 = false;
 $hasTipoAcompanhamento = false;
+$hasTipoAcompanhamento2 = false;
 $hasParticipaAee = false;
 $resCols = $conn->query("SHOW COLUMNS FROM alunos_aee");
 if ($resCols) {
@@ -132,8 +143,12 @@ if ($resCols) {
             $hasMonitorMatricula = true;
         } elseif ($f === 'acompanhante_matricula') {
             $hasAcompanhanteMatricula = true;
+        } elseif ($f === 'acompanhante_matricula_2') {
+            $hasAcompanhanteMatricula2 = true;
         } elseif ($f === 'tipo_acompanhamento') {
             $hasTipoAcompanhamento = true;
+        } elseif ($f === 'tipo_acompanhamento_2') {
+            $hasTipoAcompanhamento2 = true;
         } elseif ($f === 'participa_aee') {
             $hasParticipaAee = true;
         }
@@ -149,24 +164,41 @@ $professionalMatriculaColumn = $hasAcompanhanteMatricula
 
 if ($professionalMatriculaColumn !== null) {
     $selectMonitor = ", um.nome AS monitor_nome";
+    if ($hasAcompanhanteMatricula2) {
+        $selectMonitor .= ", um2.nome AS monitor_nome_2";
+    } else {
+        $selectMonitor .= ", NULL AS monitor_nome_2";
+    }
     $joinMonitor = "LEFT JOIN usuarios um ON um.matricula = aa.{$professionalMatriculaColumn}";
+    if ($hasAcompanhanteMatricula2) {
+        $joinMonitor .= "\n    LEFT JOIN usuarios um2 ON um2.matricula = aa.acompanhante_matricula_2";
+    }
     $selectTipoProfissional = $hasTipoAcompanhamento
         ? ", aa.tipo_acompanhamento AS tipo_profissional"
         : ", NULL AS tipo_profissional";
+    $selectTipoProfissional .= $hasTipoAcompanhamento2
+        ? ", aa.tipo_acompanhamento_2 AS tipo_profissional_2"
+        : ", NULL AS tipo_profissional_2";
     $joinTipoProfissional = "";
 } elseif ($monitorColumn !== null) {
-    $selectMonitor = ", aa.`{$monitorColumn}` AS monitor_nome";
+    $selectMonitor = ", aa.`{$monitorColumn}` AS monitor_nome, NULL AS monitor_nome_2";
     $joinMonitor = "";
     $selectTipoProfissional = $hasTipoAcompanhamento
         ? ", aa.tipo_acompanhamento AS tipo_profissional"
         : ", NULL AS tipo_profissional";
+    $selectTipoProfissional .= $hasTipoAcompanhamento2
+        ? ", aa.tipo_acompanhamento_2 AS tipo_profissional_2"
+        : ", NULL AS tipo_profissional_2";
     $joinTipoProfissional = "";
 } else {
-    $selectMonitor = ", NULL AS monitor_nome";
+    $selectMonitor = ", NULL AS monitor_nome, NULL AS monitor_nome_2";
     $joinMonitor = "";
     $selectTipoProfissional = $hasTipoAcompanhamento
         ? ", aa.tipo_acompanhamento AS tipo_profissional"
         : ", NULL AS tipo_profissional";
+    $selectTipoProfissional .= $hasTipoAcompanhamento2
+        ? ", aa.tipo_acompanhamento_2 AS tipo_profissional_2"
+        : ", NULL AS tipo_profissional_2";
     $joinTipoProfissional = "";
 }
 
@@ -223,6 +255,11 @@ if ($monitorColumn !== null || $professionalMatriculaColumn !== null) {
         $sql = str_replace(
             ", um.nome AS monitor_nome",
             ", MAX(um.nome) AS monitor_nome",
+            $sql
+        );
+        $sql = str_replace(
+            ", um2.nome AS monitor_nome_2",
+            ", MAX(um2.nome) AS monitor_nome_2",
             $sql
         );
     } else {
@@ -295,13 +332,23 @@ if (empty($rows)) {
         $html .= '<h2>' . h_pdf($cidKey) . ' (' . count($items) . ')</h2>';
         $html .= '<table><thead><tr><th class="w-aluno">Aluno</th><th class="w-matricula">Matrícula</th><th class="w-escola">Escola</th><th class="w-cid">CID completo</th><th class="w-tipo">Tipo</th><th class="w-profissional">Profissional</th></tr></thead><tbody>';
         foreach ($items as $r) {
+            $tiposProfissionais = ((int)($r['monitor_exclusivo'] ?? 0) === 1)
+                ? join_values_pdf([
+                    ($r['monitor_nome'] ?? '') !== '' ? tipo_profissional_label_pdf($r['tipo_profissional'] ?? 'monitor') : '',
+                    ($r['monitor_nome_2'] ?? '') !== '' ? tipo_profissional_label_pdf($r['tipo_profissional_2'] ?? 'monitor') : '',
+                ])
+                : '-';
+            $nomesProfissionais = join_values_pdf([
+                ($r['monitor_nome'] ?? '') !== '' ? $r['monitor_nome'] : '',
+                ($r['monitor_nome_2'] ?? '') !== '' ? $r['monitor_nome_2'] : '',
+            ]);
             $html .= '<tr>'
                 . '<td>' . h_pdf($r['aluno_nome'] ?? '-') . '</td>'
                 . '<td>' . h_pdf($r['matricula_aluno'] ?? '-') . '</td>'
                 . '<td>' . h_pdf($r['escola_nome'] ?? '-') . '</td>'
                 . '<td>' . h_pdf($r['cid'] ?: '-') . '</td>'
-                . '<td>' . (((int)($r['monitor_exclusivo'] ?? 0) === 1) ? h_pdf(tipo_profissional_label_pdf($r['tipo_profissional'] ?? 'monitor')) : '-') . '</td>'
-                . '<td>' . h_pdf(($r['monitor_nome'] ?? '') !== '' ? $r['monitor_nome'] : '-') . '</td>'
+                . '<td>' . h_pdf($tiposProfissionais) . '</td>'
+                . '<td>' . h_pdf($nomesProfissionais) . '</td>'
                 . '</tr>';
         }
         $html .= '</tbody></table>';
@@ -320,6 +367,16 @@ if (empty($rows)) {
         $html .= '<h2>' . h_pdf($school) . '</h2>';
         $html .= '<table><thead><tr><th class="w-aluno">Aluno</th><th class="w-matricula">Matrícula</th><th class="w-cid">CID</th><th class="w-flag">Diag.</th><th class="w-flag">Suspeita</th><th class="w-flag">TEAbraça</th><th class="w-flag">Atend. AEE</th><th class="w-tipo">Tipo</th><th class="w-profissional">Profissional</th></tr></thead><tbody>';
         foreach ($items as $r) {
+            $tiposProfissionais = ((int)($r['monitor_exclusivo'] ?? 0) === 1)
+                ? join_values_pdf([
+                    ($r['monitor_nome'] ?? '') !== '' ? tipo_profissional_label_pdf($r['tipo_profissional'] ?? 'monitor') : '',
+                    ($r['monitor_nome_2'] ?? '') !== '' ? tipo_profissional_label_pdf($r['tipo_profissional_2'] ?? 'monitor') : '',
+                ])
+                : '-';
+            $nomesProfissionais = join_values_pdf([
+                ($r['monitor_nome'] ?? '') !== '' ? $r['monitor_nome'] : '',
+                ($r['monitor_nome_2'] ?? '') !== '' ? $r['monitor_nome_2'] : '',
+            ]);
             $html .= '<tr>'
                 . '<td>' . h_pdf($r['aluno_nome'] ?? '-') . '</td>'
                 . '<td>' . h_pdf($r['matricula_aluno'] ?? '-') . '</td>'
@@ -328,8 +385,8 @@ if (empty($rows)) {
                 . '<td>' . ((int)$r['suspeita'] === 1 ? 'Sim' : 'Não') . '</td>'
                 . '<td>' . ((int)$r['frequenta_teabraca'] === 1 ? 'Sim' : 'Não') . '</td>'
                 . '<td>' . ((int)($r['participa_aee'] ?? 0) === 1 ? 'Sim' : 'Não') . '</td>'
-                . '<td>' . (((int)($r['monitor_exclusivo'] ?? 0) === 1) ? h_pdf(tipo_profissional_label_pdf($r['tipo_profissional'] ?? 'monitor')) : '-') . '</td>'
-                . '<td>' . h_pdf(($r['monitor_nome'] ?? '') !== '' ? $r['monitor_nome'] : '-') . '</td>'
+                . '<td>' . h_pdf($tiposProfissionais) . '</td>'
+                . '<td>' . h_pdf($nomesProfissionais) . '</td>'
                 . '</tr>';
         }
         $html .= '</tbody></table>';
@@ -337,6 +394,16 @@ if (empty($rows)) {
 } else {
     $html .= '<table><thead><tr><th class="w-aluno">Aluno</th><th class="w-matricula">Matrícula</th><th class="w-escola">Escola</th><th class="w-cid">CID</th><th class="w-flag">Diag.</th><th class="w-flag">Suspeita</th><th class="w-flag">TEAbraça</th><th class="w-flag">Atend. AEE</th><th class="w-tipo">Tipo</th><th class="w-profissional">Profissional</th></tr></thead><tbody>';
     foreach ($rows as $r) {
+        $tiposProfissionais = ((int)($r['monitor_exclusivo'] ?? 0) === 1)
+            ? join_values_pdf([
+                ($r['monitor_nome'] ?? '') !== '' ? tipo_profissional_label_pdf($r['tipo_profissional'] ?? 'monitor') : '',
+                ($r['monitor_nome_2'] ?? '') !== '' ? tipo_profissional_label_pdf($r['tipo_profissional_2'] ?? 'monitor') : '',
+            ])
+            : '-';
+        $nomesProfissionais = join_values_pdf([
+            ($r['monitor_nome'] ?? '') !== '' ? $r['monitor_nome'] : '',
+            ($r['monitor_nome_2'] ?? '') !== '' ? $r['monitor_nome_2'] : '',
+        ]);
         $html .= '<tr>'
             . '<td>' . h_pdf($r['aluno_nome'] ?? '-') . '</td>'
             . '<td>' . h_pdf($r['matricula_aluno'] ?? '-') . '</td>'
@@ -346,8 +413,8 @@ if (empty($rows)) {
             . '<td>' . ((int)$r['suspeita'] === 1 ? 'Sim' : 'Não') . '</td>'
             . '<td>' . ((int)$r['frequenta_teabraca'] === 1 ? 'Sim' : 'Não') . '</td>'
             . '<td>' . ((int)($r['participa_aee'] ?? 0) === 1 ? 'Sim' : 'Não') . '</td>'
-            . '<td>' . (((int)($r['monitor_exclusivo'] ?? 0) === 1) ? h_pdf(tipo_profissional_label_pdf($r['tipo_profissional'] ?? 'monitor')) : '-') . '</td>'
-            . '<td>' . h_pdf(($r['monitor_nome'] ?? '') !== '' ? $r['monitor_nome'] : '-') . '</td>'
+            . '<td>' . h_pdf($tiposProfissionais) . '</td>'
+            . '<td>' . h_pdf($nomesProfissionais) . '</td>'
             . '</tr>';
     }
     $html .= '</tbody></table>';

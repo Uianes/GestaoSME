@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../routes.php';
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/signature_helpers.php';
 
 if (!function_exists('proto_mail_base_app_url')) {
     function proto_mail_base_app_url(): string
@@ -149,28 +150,8 @@ if (!function_exists('proto_send_document_emails')) {
         }
         $destinatarios = array_values(array_filter(array_unique($destinatarios)));
 
-        $stmt = $conn->prepare('
-            SELECT a.assinado_em, u.nome, v.cargo
-            FROM doc_assinaturas a
-            INNER JOIN usuarios u ON u.matricula = a.usuario
-            LEFT JOIN vinculo v ON v.matricula = a.usuario
-            WHERE a.documento_id = ? AND a.status = "assinado"
-            ORDER BY a.assinado_em DESC
-            LIMIT 1
-        ');
-        $stmt->bind_param('i', $documentoId);
-        $stmt->execute();
-        $assinatura = $stmt->get_result()->fetch_assoc();
-        $stmt->close();
-
-        $assinaturaInfo = [];
-        if ($assinatura) {
-            $assinaturaInfo = [
-                'nome' => $assinatura['nome'] ?? '',
-                'cargo' => $assinatura['cargo'] ?? '',
-                'data' => !empty($assinatura['assinado_em']) ? date('d/m/Y H:i', strtotime($assinatura['assinado_em'])) : '',
-            ];
-        }
+        $assinaturasInfo = proto_fetch_signed_signatures($conn, $documentoId);
+        $validationUrl = proto_signature_validation_url();
 
         $unidadeOrigem = $documento['unidade_origem_nome'] ?? '';
         $logoFile = __DIR__ . '/../img/brasao-santo-augusto.png';

@@ -1,5 +1,5 @@
 <?php
-// Expected variables: $documento, $versao, $numeracao, $unidadeOrigem, $destinatarios, $assinaturaInfo, $logoSrc
+// Expected variables: $documento, $versao, $numeracao, $unidadeOrigem, $destinatarios, $assinaturaInfo|$assinaturasInfo, $logoSrc, $validationUrl
 function h($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 function format_data_extenso($data) {
     $meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
@@ -25,9 +25,27 @@ $de = $unidadeOrigem ?: '—';
 $para = $destinatarios ?: ['—'];
 $assunto = $documento['assunto'] ?? '';
 
-$assinaturaNome = $assinaturaInfo['nome'] ?? '';
-$assinaturaCargo = $assinaturaInfo['cargo'] ?? '';
-$assinaturaData = $assinaturaInfo['data'] ?? '';
+$assinaturasLista = [];
+if (!empty($assinaturasInfo) && is_array($assinaturasInfo)) {
+    foreach ($assinaturasInfo as $assinaturaItem) {
+        if (!is_array($assinaturaItem)) {
+            continue;
+        }
+        $assinaturasLista[] = [
+            'nome' => (string)($assinaturaItem['nome'] ?? ''),
+            'cargo' => (string)($assinaturaItem['cargo'] ?? ''),
+            'data' => (string)($assinaturaItem['data'] ?? ''),
+            'codigo_verificacao' => (string)($assinaturaItem['codigo_verificacao'] ?? ''),
+        ];
+    }
+} elseif (!empty($assinaturaInfo) && is_array($assinaturaInfo)) {
+    $assinaturasLista[] = [
+        'nome' => (string)($assinaturaInfo['nome'] ?? ''),
+        'cargo' => (string)($assinaturaInfo['cargo'] ?? ''),
+        'data' => (string)($assinaturaInfo['data'] ?? ''),
+        'codigo_verificacao' => (string)($assinaturaInfo['codigo_verificacao'] ?? ''),
+    ];
+}
 
 $tipoExibicao = $tipoNome;
 $tipoLower = strtolower($tipoNome);
@@ -36,15 +54,22 @@ if (strpos($tipoLower, 'memorando') !== false) {
 } elseif (strpos($tipoLower, 'oficio') !== false || strpos($tipoLower, 'ofício') !== false) {
     $tipoExibicao = 'Ofício';
 }
+
+$validationUrl = trim((string)($validationUrl ?? ''));
 ?>
 <!doctype html>
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
-  <title><?= h($tipoNome) ?> <?= h($numero) ?></title>
+  <title><?= h($tipoNome) ?> <?= h($numeroBruto) ?></title>
   <style>
     @page { margin: 4mm 10mm 6mm 16mm; }
-    body { font-family: "Times New Roman", serif; color: #111; margin: 4mm 10mm 6mm 16mm; }
+    body {
+      font-family: "Times New Roman", serif;
+      color: #111;
+      margin: 4mm 10mm 6mm 16mm;
+      padding-bottom: 120px;
+    }
     .header { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
     .header td { vertical-align: middle; }
     .header .logo-cell { width: 110px; padding-right: 18px; }
@@ -94,12 +119,12 @@ if (strpos($tipoLower, 'memorando') !== false) {
       page-break-inside: avoid;
       clear: both;
     }
-    .footer td { width: 50%; vertical-align: bottom; }
-    .footer .footer-gap { width: 36px; }
+    .footer td { vertical-align: bottom; }
     .assinatura { text-align: center; }
     .assinatura .linha-ass { border-top: 1px solid #000; margin-top: 32px; padding-top: 6px; }
     .recebido { text-align: center; }
     .recebido .linha-rec { border-top: 1px solid #000; margin-top: 32px; padding-top: 6px; }
+    .recebido-wrap { margin-top: 28px; }
     .meta { margin-top: 18px; margin-bottom: 22px; }
     .meta div { margin-bottom: 8px; }
     .meta div:last-child { margin-bottom: 0; }
@@ -108,9 +133,49 @@ if (strpos($tipoLower, 'memorando') !== false) {
       font-weight: 700;
       text-align: justify;
     }
+    .rodape-institucional {
+      position: fixed;
+      left: 16mm;
+      right: 10mm;
+      bottom: 0;
+      padding-top: 8px;
+      border-top: 2px solid #000;
+      text-align: center;
+      page-break-inside: avoid;
+      background: #fff;
+    }
+    .rodape-institucional .contato {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+    .assinatura .validacao {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 10px;
+      line-height: 1.25;
+      margin-top: 6px;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .assinatura .validacao a {
+      color: #111;
+      text-decoration: underline;
+    }
+    .rodape-institucional .mensagem {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.15;
+      margin-top: 2px;
+    }
   </style>
 </head>
 <body>
+  <div class="rodape-institucional">
+    <div class="contato">Rua Cel. Júlio Pereira dos Santos, 465 - Fone: (55) 99663-5639 - E-mail: smecpedagogico.sa@gmail.com - CEP: 98.590-000 - Santo Augusto - RS</div>
+    <div class="mensagem">“NÃO USE DROGAS, DOE ÓRGÃOS, DOE SANGUE: SALVE VIDAS”</div>
+  </div>
+
   <table class="header">
     <tr>
       <td class="logo-cell">
@@ -154,25 +219,55 @@ if (strpos($tipoLower, 'memorando') !== false) {
     <?= $versao ? $versao['conteudo'] : '<em>Sem conteúdo.</em>' ?>
   </div>
 
-  <table class="footer">
-    <tr>
-      <td>
-        <div class="assinatura">
-          <div><strong>Assinatura</strong></div>
-          <div><?= h($assinaturaNome) ?></div>
-          <?php if ($assinaturaCargo): ?><div><?= h($assinaturaCargo) ?></div><?php endif; ?>
-          <?php if ($assinaturaData): ?><div>Assinado em <?= h($assinaturaData) ?></div><?php endif; ?>
-          <div class="linha-ass"></div>
-        </div>
-      </td>
-      <td class="footer-gap"></td>
-      <td>
-        <div class="recebido">
-          <div>Recebido ____/____/______</div>
-          <div class="linha-rec"></div>
-        </div>
-      </td>
-    </tr>
-  </table>
+  <?php if ($assinaturasLista !== []): ?>
+    <table class="footer">
+      <?php foreach (array_chunk($assinaturasLista, 2) as $assinaturasLinha): ?>
+        <tr>
+          <?php if (count($assinaturasLinha) === 1): ?>
+            <td style="width:50%; padding-right:18px; padding-left:18px;"></td>
+          <?php endif; ?>
+          <?php foreach ($assinaturasLinha as $assinaturaItem): ?>
+            <td style="width:50%; padding-right:18px; padding-left:18px;">
+              <div class="assinatura">
+                <div><strong>Assinatura</strong></div>
+                <div><?= h($assinaturaItem['nome']) ?></div>
+                <?php if ($assinaturaItem['cargo'] !== ''): ?><div><?= h($assinaturaItem['cargo']) ?></div><?php endif; ?>
+                <?php if ($assinaturaItem['data'] !== ''): ?>
+                  <div>
+                    Assinado digitalmente em <?= h($assinaturaItem['data']) ?>.
+                    <?php if (!empty($assinaturaItem['codigo_verificacao'])): ?>
+                      Código de verificação: <?= h($assinaturaItem['codigo_verificacao']) ?>.
+                    <?php endif; ?>
+                  </div>
+                <?php endif; ?>
+                <?php if ($validationUrl !== ''): ?>
+                  <div class="validacao">
+                    Validar assinatura:
+                    <a href="<?= h($validationUrl) ?>"><?= h($validationUrl) ?></a>
+                  </div>
+                <?php endif; ?>
+                <div class="linha-ass"></div>
+              </div>
+            </td>
+          <?php endforeach; ?>
+        </tr>
+      <?php endforeach; ?>
+    </table>
+  <?php endif; ?>
+
+  <div class="recebido-wrap">
+    <table class="footer">
+      <tr>
+        <td style="width:50%;"></td>
+        <td style="width:50%; padding-right:18px; padding-left:18px;">
+          <div class="recebido">
+            <div>Recebido ____/____/______</div>
+            <div class="linha-rec"></div>
+          </div>
+        </td>
+      </tr>
+    </table>
+  </div>
+
 </body>
 </html>
