@@ -606,6 +606,7 @@ $statusClasses = [
                         <option value="folha">Memorando modelo de pagamento em folha</option>
                         <option value="pericia_medica">Solicitação de Perícia Médica</option>
                         <option value="altera_local_trabalho">Memorando GP para alteração de local de trabalho e centro de custo</option>
+                        <option value="revisao_contratos_temporarios">Modelo de revisão de contratos temporários</option>
                       </select>
                     </div>
                     <textarea id="docConteudo" name="conteudo"></textarea>
@@ -1200,6 +1201,47 @@ $statusClasses = [
           </tr>
         </table>
         <p>Atenciosas saudações,</p>
+      `,
+      revisao_contratos_temporarios: `
+        <p>Solicitamos a rescisão dos contratos temporários, das servidoras abaixo relacionadas, tendo em vista o vencimento dos contratos, conforme especificado abaixo:</p>
+        <table>
+          <tr>
+            <th>Matrícula</th>
+            <th>Servidor</th>
+            <th>Cargo</th>
+            <th>Local de Trabalho</th>
+            <th>Último dia</th>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+        </table>
+        <p>Respeitosas saudações,</p>
       `
     };
 
