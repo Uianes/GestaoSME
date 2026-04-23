@@ -56,6 +56,7 @@ if (strpos($tipoLower, 'memorando') !== false) {
 }
 
 $validationUrl = trim((string)($validationUrl ?? ''));
+$validationLabel = preg_replace('#^https?://#', '', $validationUrl);
 ?>
 <!doctype html>
 <html lang="pt-br">
@@ -63,41 +64,42 @@ $validationUrl = trim((string)($validationUrl ?? ''));
   <meta charset="utf-8">
   <title><?= h($tipoNome) ?> <?= h($numeroBruto) ?></title>
   <style>
-    @page { margin: 4mm 10mm 6mm 16mm; }
+    @page { margin: 4mm 10mm 4mm 16mm; }
     body {
       font-family: "Times New Roman", serif;
       color: #111;
-      margin: 4mm 10mm 6mm 16mm;
-      padding-bottom: 120px;
+      margin: 4mm 10mm 4mm 16mm;
+      padding-bottom: 78px;
     }
-    .header { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+    .header { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
     .header td { vertical-align: middle; }
     .header .logo-cell { width: 110px; padding-right: 18px; }
-    .header img { height: 90px; }
-    .header .org { text-transform: uppercase; font-size: 16px; line-height: 1.4; }
-    .linha { width: 100%; border-collapse: collapse; margin: 18px 0 8px; }
+    .header img { height: 82px; }
+    .header .org { text-transform: uppercase; font-size: 14px; line-height: 1.25; }
+    .linha { width: 100%; border-collapse: collapse; margin: 10px 0 4px; }
     .linha td { vertical-align: top; }
-    .linha .linha-titulo { padding-bottom: 10px; }
-    .linha .linha-data { text-align: right; white-space: nowrap; padding-top: 10px; }
+    .linha .linha-titulo { padding-bottom: 4px; }
+    .linha .linha-data { text-align: right; white-space: nowrap; padding-top: 4px; }
     .linha strong { font-weight: 700; }
-    .body { margin: 28px 0 42px; font-size: 16px; line-height: 1.6; overflow-wrap: anywhere; }
+    .body { margin: 10px 0 18px; font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
     .body:after { content: ""; display: block; clear: both; }
     .body * { max-width: 100%; }
     .body table {
       width: 100% !important;
       max-width: 100% !important;
       border-collapse: collapse;
-      margin: 8px 0;
+      margin: 4px 0;
       table-layout: fixed !important;
     }
     .body th, .body td {
       border: 1px solid #000;
-      padding: 2px 4px;
+      padding: 1px 3px;
       vertical-align: top;
       white-space: normal;
       word-break: break-word;
       overflow-wrap: anywhere;
-      font-size: 10px !important;
+      font-size: 9.5px !important;
+      line-height: 1.2 !important;
       width: auto !important;
       min-width: 0 !important;
       max-width: 100% !important;
@@ -112,24 +114,26 @@ $validationUrl = trim((string)($validationUrl ?? ''));
       max-width: 100% !important;
     }
     .body p, .body span, .body div { max-width: 100% !important; }
+    .body p { margin: 0 0 8px; }
+    .body p:last-child { margin-bottom: 0; }
     .footer {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 56px;
+      margin-top: 18px;
       page-break-inside: avoid;
       clear: both;
     }
     .footer td { vertical-align: bottom; }
-    .assinatura { text-align: center; }
-    .assinatura .linha-ass { border-top: 1px solid #000; margin-top: 32px; padding-top: 6px; }
-    .recebido { text-align: center; }
-    .recebido .linha-rec { border-top: 1px solid #000; margin-top: 32px; padding-top: 6px; }
-    .recebido-wrap { margin-top: 28px; }
-    .meta { margin-top: 18px; margin-bottom: 22px; }
-    .meta div { margin-bottom: 8px; }
+    .assinatura { text-align: left; }
+    .assinatura .linha-ass { border-top: 1px solid #000; margin-top: 12px; padding-top: 4px; }
+    .recebido { text-align: right; }
+    .recebido .linha-rec { border-top: 1px solid #000; margin-top: 12px; padding-top: 4px; }
+    .recebido-wrap { margin-top: 14px; }
+    .meta { margin-top: 8px; margin-bottom: 10px; }
+    .meta div { margin-bottom: 4px; }
     .meta div:last-child { margin-bottom: 0; }
     .meta .meta-assunto {
-      margin-top: 16px;
+      margin-top: 8px;
       font-weight: 700;
       text-align: justify;
     }
@@ -146,12 +150,12 @@ $validationUrl = trim((string)($validationUrl ?? ''));
     }
     .rodape-institucional .contato {
       font-family: Arial, Helvetica, sans-serif;
-      font-size: 11px;
+      font-size: 10px;
       line-height: 1.2;
     }
     .assinatura .validacao {
       font-family: Arial, Helvetica, sans-serif;
-      font-size: 10px;
+      font-size: 9px;
       line-height: 1.25;
       margin-top: 6px;
       word-break: break-word;
@@ -163,7 +167,7 @@ $validationUrl = trim((string)($validationUrl ?? ''));
     }
     .rodape-institucional .mensagem {
       font-family: Arial, Helvetica, sans-serif;
-      font-size: 18px;
+      font-size: 14px;
       font-weight: 700;
       line-height: 1.15;
       margin-top: 2px;
@@ -221,45 +225,86 @@ $validationUrl = trim((string)($validationUrl ?? ''));
 
   <?php if ($assinaturasLista !== []): ?>
     <table class="footer">
-      <?php foreach (array_chunk($assinaturasLista, 2) as $assinaturasLinha): ?>
+      <?php if (count($assinaturasLista) === 1): ?>
+        <?php $assinaturaItem = $assinaturasLista[0]; ?>
         <tr>
-          <?php if (count($assinaturasLinha) === 1): ?>
-            <td style="width:50%; padding-right:18px; padding-left:18px;"></td>
-          <?php endif; ?>
-          <?php foreach ($assinaturasLinha as $assinaturaItem): ?>
-            <td style="width:50%; padding-right:18px; padding-left:18px;">
-              <div class="assinatura">
-                <div><strong>Assinatura</strong></div>
-                <div><?= h($assinaturaItem['nome']) ?></div>
-                <?php if ($assinaturaItem['cargo'] !== ''): ?><div><?= h($assinaturaItem['cargo']) ?></div><?php endif; ?>
-                <?php if ($assinaturaItem['data'] !== ''): ?>
-                  <div>
-                    Assinado digitalmente em <?= h($assinaturaItem['data']) ?>.
-                    <?php if (!empty($assinaturaItem['codigo_verificacao'])): ?>
-                      Código de verificação: <?= h($assinaturaItem['codigo_verificacao']) ?>.
-                    <?php endif; ?>
-                  </div>
-                <?php endif; ?>
-                <?php if ($validationUrl !== ''): ?>
-                  <div class="validacao">
-                    Validar assinatura:
-                    <a href="<?= h($validationUrl) ?>"><?= h($validationUrl) ?></a>
-                  </div>
-                <?php endif; ?>
-                <div class="linha-ass"></div>
-              </div>
-            </td>
-          <?php endforeach; ?>
+          <td style="width:50%; padding-right:18px; padding-left:0;">
+            <div class="assinatura">
+              <div><strong>Assinatura</strong></div>
+              <div><?= h($assinaturaItem['nome']) ?></div>
+              <?php if ($assinaturaItem['cargo'] !== ''): ?><div><?= h($assinaturaItem['cargo']) ?></div><?php endif; ?>
+              <?php if ($assinaturaItem['data'] !== ''): ?>
+                <div>
+                  Assinado digitalmente em <?= h($assinaturaItem['data']) ?>.
+                  <?php if (!empty($assinaturaItem['codigo_verificacao'])): ?>
+                    Código de verificação: <?= h($assinaturaItem['codigo_verificacao']) ?>.
+                  <?php endif; ?>
+                </div>
+              <?php endif; ?>
+              <?php if ($validationUrl !== ''): ?>
+                <div class="validacao">
+                  Validar assinatura:
+                  <a href="<?= h($validationUrl) ?>"><?= h($validationLabel) ?></a>
+                </div>
+              <?php endif; ?>
+              <div class="linha-ass"></div>
+            </div>
+          </td>
+          <td style="width:50%; padding-left:18px; padding-right:0;">
+            <div class="recebido">
+              <div>Recebido ____/____/______</div>
+              <div class="linha-rec"></div>
+            </div>
+          </td>
         </tr>
-      <?php endforeach; ?>
+      <?php else: ?>
+        <?php foreach (array_chunk($assinaturasLista, 2) as $assinaturasLinha): ?>
+          <tr>
+            <?php foreach ($assinaturasLinha as $assinaturaItem): ?>
+              <td style="width:50%; padding-right:18px; padding-left:0;">
+                <div class="assinatura">
+                  <div><strong>Assinatura</strong></div>
+                  <div><?= h($assinaturaItem['nome']) ?></div>
+                  <?php if ($assinaturaItem['cargo'] !== ''): ?><div><?= h($assinaturaItem['cargo']) ?></div><?php endif; ?>
+                  <?php if ($assinaturaItem['data'] !== ''): ?>
+                    <div>
+                      Assinado digitalmente em <?= h($assinaturaItem['data']) ?>.
+                      <?php if (!empty($assinaturaItem['codigo_verificacao'])): ?>
+                        Código de verificação: <?= h($assinaturaItem['codigo_verificacao']) ?>.
+                      <?php endif; ?>
+                    </div>
+                  <?php endif; ?>
+                  <?php if ($validationUrl !== ''): ?>
+                    <div class="validacao">
+                      Validar assinatura:
+                      <a href="<?= h($validationUrl) ?>"><?= h($validationLabel) ?></a>
+                    </div>
+                  <?php endif; ?>
+                  <div class="linha-ass"></div>
+                </div>
+              </td>
+            <?php endforeach; ?>
+            <?php if (count($assinaturasLinha) === 1): ?>
+              <td style="width:50%; padding-left:18px; padding-right:0;"></td>
+            <?php endif; ?>
+          </tr>
+        <?php endforeach; ?>
+        <tr>
+          <td style="width:50%;"></td>
+          <td style="width:50%; padding-left:18px; padding-right:0;">
+            <div class="recebido">
+              <div>Recebido ____/____/______</div>
+              <div class="linha-rec"></div>
+            </div>
+          </td>
+        </tr>
+      <?php endif; ?>
     </table>
-  <?php endif; ?>
-
-  <div class="recebido-wrap">
+  <?php else: ?>
     <table class="footer">
       <tr>
         <td style="width:50%;"></td>
-        <td style="width:50%; padding-right:18px; padding-left:18px;">
+        <td style="width:50%; padding-left:18px; padding-right:0;">
           <div class="recebido">
             <div>Recebido ____/____/______</div>
             <div class="linha-rec"></div>
@@ -267,7 +312,7 @@ $validationUrl = trim((string)($validationUrl ?? ''));
         </td>
       </tr>
     </table>
-  </div>
+  <?php endif; ?>
 
 </body>
 </html>
