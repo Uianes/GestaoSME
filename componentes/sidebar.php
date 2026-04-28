@@ -41,7 +41,7 @@ $showProtocolo = sa_has_visible_links(['protocolo', 'assinatura', 'certificados'
 $showComunicados = sa_has_visible_links(['documentos', 'calendario', 'comunicadosPDDE'], $links);
 $showOuvidoria = sa_has_visible_links(['ouvidoria', 'infraestrutura', 'suporte', 'votacoes'], $links);
 $showDashboard = sa_has_visible_links(['dashboards', 'avaliacoesExternas'], $links);
-$showGestao = sa_has_visible_links(['projetos', 'ppa', 'planejamento', 'planosGestao', 'justificativas', 'atestadosSaude', 'progressao', 'patrimonio', 'transporte'], $links);
+$showGestao = sa_has_visible_links(['projetos', 'ppa', 'planejamento', 'planosGestao', 'justificativas', 'atestadosSaude', 'progressao', 'patrimonio', 'compras', 'transporte'], $links);
 $showBiblioteca = sa_has_visible_links(['biblioteca', 'leis', 'mooc'], $links);
 $showPedagogico = sa_has_visible_links(['turmas', 'pareceres', 'frequencia', 'aee', 'alunos_inclusao', 'pme', 'horarios'], $links);
 ?>
@@ -190,6 +190,9 @@ $showPedagogico = sa_has_visible_links(['turmas', 'pareceres', 'frequencia', 'ae
               <li class="sa-item"><?= $link ?></li>
             <?php endif; ?>
             <?php if (isset($links['patrimonio']) && ($link = sa_sidebar_link_or_null('patrimonio', $links['patrimonio'], $activePage))): ?>
+              <li class="sa-item"><?= $link ?></li>
+            <?php endif; ?>
+            <?php if (isset($links['compras']) && ($link = sa_sidebar_link_or_null('compras', $links['compras'], $activePage))): ?>
               <li class="sa-item"><?= $link ?></li>
             <?php endif; ?>
             <?php if (isset($links['transporte']) && ($link = sa_sidebar_link_or_null('transporte', $links['transporte'], $activePage))): ?>

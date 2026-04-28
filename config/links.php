@@ -30,6 +30,7 @@ return [
   'progressao' => ['label' => 'Gestão de Certificados', 'icon' => 'bi-person-workspace', 'href' => url('app.php?page=progressao')],
   'comunicadosPDDE' => ['label' => 'Comunicados PDDE', 'icon' => 'bi-chat-quote-fill', 'href' => url('app.php?page=comunicadosPDDE')],
   'patrimonio' => ['label' => 'Patrimônio', 'icon' => 'bi-music-player', 'href' => url('app.php?page=patrimonio')],
+  'compras' => ['label' => 'Compras', 'icon' => 'bi-cart-check', 'href' => url('app.php?page=compras')],
   'suporte' => ['label' => 'Suporte', 'icon' => 'bi-hammer', 'href' => url('app.php?page=suporte')],
   'transporte' => ['label' => 'Transporte Escolar', 'icon' => 'bi-bus-front', 'href' => url('app.php?page=transporte')],
   'votacoes' => ['label' => 'Votações', 'icon' => 'bi-person-plus', 'href' => url('app.php?page=votacoes')]

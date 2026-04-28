@@ -4,6 +4,7 @@ require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/../auth/permissions.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/signature_helpers.php';
+require_once __DIR__ . '/govbr_signature_helpers.php';
 
 require_login();
 if (!user_can_access_system('protocolo') && !user_can_access_system('documentos')) {
@@ -171,7 +172,34 @@ foreach ($anexos as $anexo) {
     ];
 }
 
-if ($anexosExistentes === []) {
+$assinaturasArquivos = [];
+if (proto_govbr_schema_ready($conn)) {
+    $stmt = $conn->prepare('SELECT arquivo_assinatura, assinatura_mime FROM doc_assinaturas WHERE documento_id = ? AND status = "assinado" AND provedor = "govbr" AND arquivo_assinatura IS NOT NULL AND arquivo_assinatura <> "" ORDER BY ordem');
+    $stmt->bind_param('i', $docId);
+    $stmt->execute();
+    $assinaturasGov = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    foreach ($assinaturasGov as $index => $assinaturaGov) {
+        $relativePath = trim((string)($assinaturaGov['arquivo_assinatura'] ?? ''));
+        if ($relativePath === '') {
+            continue;
+        }
+        $fullPath = realpath(__DIR__ . '/../' . $relativePath);
+        if ($fullPath === false || $baseDir === false) {
+            continue;
+        }
+        if (strncmp($fullPath, $baseDir, strlen($baseDir)) !== 0 || !is_file($fullPath)) {
+            continue;
+        }
+        $assinaturasArquivos[] = [
+            'entry_name' => 'assinaturas/' . basename($fullPath) ?: ('assinatura-' . ($index + 1) . '.p7s'),
+            'full_path' => $fullPath,
+        ];
+    }
+}
+
+if ($anexosExistentes === [] && $assinaturasArquivos === []) {
     if (ob_get_length()) {
         ob_end_clean();
     }
@@ -221,6 +249,9 @@ foreach ($anexosExistentes as $index => $anexo) {
         $entryName = 'anexos/anexo-' . ($index + 1);
     }
     $zip->addFile($anexo['full_path'], $entryName);
+}
+foreach ($assinaturasArquivos as $assinaturaArquivo) {
+    $zip->addFile($assinaturaArquivo['full_path'], $assinaturaArquivo['entry_name']);
 }
 $zip->close();
 

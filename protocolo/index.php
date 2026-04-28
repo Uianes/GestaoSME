@@ -3,6 +3,7 @@ require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/../auth/permissions.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/group_helpers.php';
+require_once __DIR__ . '/govbr_signature_helpers.php';
 
 require_login();
 if (!user_can_access_system('protocolo')) {
@@ -54,6 +55,7 @@ while ($row = $result->fetch_assoc()) {
 
 $gruposDestinatarios = proto_fetch_recipient_groups($conn);
 $groupsSchemaReady = proto_groups_schema_ready($conn);
+$govbrSigningAvailable = proto_govbr_signing_enabled() && proto_govbr_schema_ready($conn);
 
 function h($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
@@ -447,7 +449,12 @@ $statusClasses = [
                       <li class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
                           <div class="fw-semibold"><?= h($ass['nome']) ?></div>
-                          <div class="text-muted small">Ordem <?= (int)$ass['ordem'] ?></div>
+                          <div class="text-muted small">
+                            Ordem <?= (int)$ass['ordem'] ?>
+                            <?php if (!empty($ass['provedor']) && $ass['status'] === 'assinado'): ?>
+                              • <?= h(strtoupper((string)$ass['provedor'])) ?>
+                            <?php endif; ?>
+                          </div>
                         </div>
                         <span class="badge text-bg-light border badge-status"><?= h($ass['status']) ?></span>
                       </li>
@@ -523,6 +530,15 @@ $statusClasses = [
                       <input type="hidden" name="documento_id" value="<?= (int)$documento['id'] ?>">
                       <button class="btn btn-outline-primary">Assinar documento</button>
                     </form>
+                    <?php if ($govbrSigningAvailable): ?>
+                      <form class="mt-2" method="post" action="actions/document_sign_govbr_start.php">
+                        <input type="hidden" name="documento_id" value="<?= (int)$documento['id'] ?>">
+                        <button class="btn btn-outline-success">Assinar com GOV.BR</button>
+                      </form>
+                      <div class="form-text mt-1">
+                        A assinatura GOV.BR gera um arquivo `.p7s` vinculado ao PDF do documento.
+                      </div>
+                    <?php endif; ?>
                     <form class="mt-2" method="post" action="actions/document_reject.php">
                       <input type="hidden" name="documento_id" value="<?= (int)$documento['id'] ?>">
                       <input type="text" name="observacao" class="form-control mb-2" placeholder="Motivo da recusa (opcional)">
